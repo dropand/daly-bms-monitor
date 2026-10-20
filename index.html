@@ -274,8 +274,9 @@ async function addDevice(all){audio();try{Notification.requestPermission&&Notifi
   if(devs.has(device.id)){const o=devs.get(device.id);if(!o.running){o.want=true;o.reconnect()}glog('уже добавлена: '+o.name);return}
   const dv=new Dev(device);devs.set(device.id,dv);$('hero').style.display='none';upd(dv);glog('подключаю '+dv.name+', в истории '+dv.long.length+' точек');
   try{await dv.connect()}catch(e){dv.err=String(e.message||e);glog(dv.name+': '+dv.err);dv.reconnect()}
- }catch(e){glog('не подключилось: '+e.message)}}
+ }catch(e){glog('не подключилось: '+e.message);if(/not supported on this platform/i.test(e.message))$('sup').innerHTML='<b>Этот браузер не поддерживает Bluetooth.</b> Откройте ссылку в Google Chrome (не во встроенном браузере телефона, не в Яндексе, Samsung Internet или Telegram). В Android включите Bluetooth и геолокацию, дайте Chrome разрешение «Устройства поблизости».'}}
 $('add').onclick=()=>addDevice(false);$('addall').onclick=()=>addDevice(true);
+const ua=navigator.userAgent;if(/SamsungBrowser|YaBrowser|OPR\/|UCBrowser|MiuiBrowser|VivoBrowser|; wv\)|Telegram|FB_IAB|FBAN/i.test(ua))$('sup').textContent='Похоже, это не Google Chrome: Bluetooth может не работать. Откройте ссылку в Chrome.';
 if(!navigator.bluetooth){$('sup').textContent='Web Bluetooth недоступен: откройте страницу в Chrome на Android (или Chrome/Edge на компьютере) по адресу https.';$('add').disabled=$('addall').disabled=true}
 setInterval(()=>{$('clock').textContent=new Date().toLocaleTimeString();devs.forEach(upd)},2000);
 addEventListener('beforeunload',()=>devs.forEach(d=>d.save()));
