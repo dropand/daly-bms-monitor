@@ -1,5 +1,5 @@
 // Кэш для офлайн-запуска: страница, манифест, значки. Данные BMS идут по Bluetooth, сеть не нужна.
-const CACHE = 'daly-bms-v4';
+const CACHE = 'daly-bms-v5';
 const FILES = ['./', 'index.html', 'app.css', 'app.js', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png'];
 self.addEventListener('install', e => e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting())));
 self.addEventListener('activate', e => e.waitUntil(

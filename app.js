@@ -64,8 +64,8 @@ async function upload(dv,manual){
     if(t!=='ok')throw new Error(t.slice(0,80)||'пустой ответ');confirmed=true}
    catch(e){if(!(e instanceof TypeError))throw e;await fetch(cloudUrl(),{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body,referrerPolicy:'no-referrer',credentials:'omit'})}
   if(rows.length)dv.upT=rows[rows.length-1][0];if(evs.length)dv.upE=evs[evs.length-1].t;dv.sent+=rows.length;dv.sentAt=Date.now();dv.sentOk=confirmed?true:'noconf';dv.save();
-  toast(`☁ Отправлено: ${rows.length} замеров, ${evs.length} событий${confirmed?' · подтверждено':' · без подтверждения'}`,'ok');glog(`отправлено в облако: ${rows.length} замеров, ${evs.length} событий`)}
- catch(e){dv.sentOk=false;toast('☁ Не отправлено: '+(e.message||e),'bad');glog('облако: '+(e.message||e))}
+  if(manual||!dv.toasted){dv.toasted=true;toast(`☁ Отправлено: ${rows.length} замеров, ${evs.length} событий${confirmed?' · подтверждено':' · без подтверждения'}`,'ok')}glog(`отправлено в облако: ${rows.length} замеров, ${evs.length} событий`)}
+ catch(e){dv.sentOk=false;if(manual||!dv.failToast||Date.now()-dv.failToast>600000){dv.failToast=Date.now();toast('☁ Не отправлено: '+(e.message||e),'bad')}glog('облако: '+(e.message||e))}
  finally{dv.sending=false}}
 const uploadAll=m=>devs.forEach(d=>upload(d,m));
 
@@ -229,7 +229,7 @@ if(!navigator.bluetooth){$('sup').textContent='Web Bluetooth недоступе�
 $('cloudOn').checked=localStorage.getItem('daly2:cloud')==='1';
 $('cloudOn').onchange=()=>{localStorage.setItem('daly2:cloud',$('cloudOn').checked?'1':'0');if($('cloudOn').checked&&!cloudUrl())glog('облако пока не настроено автором');$('cloudInfo').textContent=cloudUrl()?'':' (облако пока не подключено)'};
 $('cloudInfo').textContent=cloudUrl()?'':' (облако пока не подключено)';
-setInterval(uploadAll,300000);
+setInterval(uploadAll,60000);
 setInterval(()=>{$('clock').textContent=new Date().toLocaleTimeString();devs.forEach(upd)},2000);
 addEventListener('beforeunload',()=>devs.forEach(d=>d.save()));
 if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('sw.js').catch(()=>{});
