@@ -53,6 +53,7 @@ details summary{cursor:pointer;color:var(--mut);font-size:13px}.ev{font:11px ui-
 .e1{color:var(--warn)}.e2{color:var(--bad);font-weight:700}.note{color:var(--mut);font-size:12px}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:6px}
 #hero{text-align:center;padding:26px 12px}#hero h2{font-size:15px;color:var(--fg);text-transform:none;letter-spacing:0}
+label input[type=checkbox]{width:auto;margin-right:6px;vertical-align:middle}
 </style>
 </head>
 <body>
@@ -62,6 +63,9 @@ details summary{cursor:pointer;color:var(--mut);font-size:13px}.ev{font:11px ui-
  <p class="note">Включите BMS (экран горит), закройте приложение Smart BMS, нажмите кнопку и выберите устройство <b>DL-…</b>. История и настройки хранятся на телефоне. Только чтение: в BMS приложение ничего не пишет.</p>
  <div class="row" style="justify-content:center"><button class="p" id="add">Добавить BMS</button><button id="addall">Показать все устройства</button></div>
  <p class="note" id="sup"></p>
+ <label class="note" style="display:block;text-align:left;margin-top:10px"><input type="checkbox" id="cloudOn"> Отправлять данные заряда автору приложения (анонимно), чтобы он мог оценить состояние аккумулятора.
+ <span id="cloudInfo"></span></label>
+ <p class="note" style="text-align:left">Отправляется: напряжения ячеек, ток, события, химия и ёмкость, случайный номер сессии. Не отправляется: имя устройства, геолокация, контакты. По умолчанию выключено.</p>
 </div>
 <div id="root"></div>
 <div class="card"><h2>Журнал</h2><div class="ev" id="log"></div></div>
@@ -84,7 +88,7 @@ details summary{cursor:pointer;color:var(--mut);font-size:13px}.ev{font:11px ui-
  <details class="card"><summary>Настройки и данные</summary>
   <div class="row">Химия <select class="chem"><option value="lfp">LiFePO4</option><option value="nmc">Li-ion (NMC)</option></select>
    Ёмкость, А·ч <input type="number" class="cap" min="1" max="2000" step="1"></div>
-  <div class="row"><button class="bcsv">Скачать CSV</button><button class="bshare">Поделиться</button><button class="bclr">Очистить историю</button><button class="bdis">Отключить</button></div>
+  <div class="row"><button class="bcsv">Скачать CSV</button><button class="bshare">Поделиться</button><button class="bcloud">Отправить в облако</button><button class="bclr">Очистить историю</button><button class="bdis">Отключить</button></div>
   <p class="note">Ёмкость нужна для оценки времени до конца заряда и «идеальной» кривой. Химия задаёт предел ячейки (3,65 В для LiFePO4, 4,2 В для NMC).</p></details>
  <details class="card"><summary>События</summary><div class="ev evl"></div></details>
 </section>
@@ -132,16 +136,31 @@ function alarm(msg){glog('СИГНАЛ: '+msg);if(Date.now()-lastAlarm<60000)ret
 let wl=null;async function lock(){try{wl=await navigator.wakeLock.request('screen')}catch(e){}}
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&devs.size)lock()});
 
+// ---------- облако (по согласию) ----------
+const CLOUD_URL='';   // адрес Google Apps Script; задаётся при публикации
+const cloudUrl=()=>CLOUD_URL||localStorage.getItem('daly2:cloudurl')||'';
+const cloudOn=()=>localStorage.getItem('daly2:cloud')==='1'&&!!cloudUrl();
+const anon=(()=>{let a=localStorage.getItem('daly2:anon');if(!a){a=([...crypto.getRandomValues(new Uint8Array(6))].map(x=>x.toString(16).padStart(2,'0')).join(''));localStorage.setItem('daly2:anon',a)}return a})();
+const hash6=s=>{let h=5381;for(const c of s)h=((h<<5)+h+c.charCodeAt(0))>>>0;return h.toString(16).padStart(8,'0')};
+async function upload(dv,manual){if(!cloudOn()){if(manual)glog('облако не включено или не настроено');return}
+ const rows=dv.long.filter(x=>x[0]>(dv.upT||0)).slice(0,500),evs=dv.events.filter(e=>e.t>(dv.upE||'')).reverse().slice(0,100);
+ if(!rows.length&&!evs.length){if(manual)glog('нечего отправлять: новых данных нет');return}
+ const body={v:1,sid:anon+'-'+hash6(dv.id),chem:dv.chem,cap:dv.cap,cycles:dv.last&&dv.last.cycles,rows:rows.map(x=>[x[0],x[1],...x[2]]),events:evs.map(e=>[e.t,e.level,e.text])};
+ try{await fetch(cloudUrl(),{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify(body)});
+  if(rows.length)dv.upT=rows[rows.length-1][0];if(evs.length)dv.upE=evs[evs.length-1].t;dv.save();glog(`отправлено в облако: ${rows.length} замеров, ${evs.length} событий`)}
+ catch(e){glog('облако недоступно: '+e.message)}}
+const uploadAll=m=>devs.forEach(d=>upload(d,m));
+
 // ---------- BMS ----------
 class Dev{
  constructor(device){this.dev=device;this.id=device.id;this.name=device.name||device.id;this.key='daly2:'+device.id;
   this.buf=[];this.frames=[];this.waiter=null;this.hist=[];this.long=[];this.events=[];this.chem='lfp';this.cap=105;
   this.last=null;this.prev=null;this.online=false;this.err='подключение…';this.want=true;this.running=false;this.badUntil=0;
   this.ahIn=0;this.ahOut=0;this.t0=Date.now();this.longT=0;this.checks=[];this.level=3;
-  try{const s=JSON.parse(localStorage.getItem(this.key)||'{}');if(s.chem)this.chem=s.chem;if(s.cap)this.cap=s.cap;this.long=s.long||[];this.events=s.events||[];this.longT=this.long.length?this.long[this.long.length-1][0]:0}catch(e){}
-  device.addEventListener('gattserverdisconnected',()=>{this.running=false;this.setOnline(false,'связь потеряна');if(this.want)this.reconnect()})}
+  try{const s=JSON.parse(localStorage.getItem(this.key)||'{}');if(s.chem)this.chem=s.chem;if(s.cap)this.cap=s.cap;this.long=s.long||[];this.events=s.events||[];this.upT=s.upT||0;this.upE=s.upE||'';this.longT=this.long.length?this.long[this.long.length-1][0]:0}catch(e){}
+  device.addEventListener('gattserverdisconnected',()=>{this.running=false;this.setOnline(false,'связь потеряна');upload(this);if(this.want)this.reconnect()})}
  get C(){return CHEM[this.chem]}
- save(){try{localStorage.setItem(this.key,JSON.stringify({chem:this.chem,cap:this.cap,long:this.long.slice(-MAXLONG),events:this.events.slice(0,200)}))}catch(e){glog('история не сохраняется: '+e)}}
+ save(){try{localStorage.setItem(this.key,JSON.stringify({chem:this.chem,cap:this.cap,long:this.long.slice(-MAXLONG),events:this.events.slice(0,200),upT:this.upT,upE:this.upE}))}catch(e){glog('история не сохраняется: '+e)}}
  event(level,text){this.events.unshift({t:stamp(),level,text});if(this.events.length>200)this.events.pop();if(level==2)alarm(this.name+': '+text)}
  setOnline(on,err){if(on!==this.online){this.event(on?0:2,on?'связь установлена':'связь потеряна: '+(err||''))}this.online=on;if(!on)this.err=err||''}
  async reconnect(){for(let i=0;this.want&&!this.running;i++){await sleep(Math.min(3000+i*1000,10000));if(!this.want||this.running)return;
@@ -240,6 +259,7 @@ const devs=new Map(),panels=new Map();
 function mk(dv){const el=$('tpl').content.firstElementChild.cloneNode(true);$('root').appendChild(el);const q=s=>el.querySelector(s);
  q('.chem').value=dv.chem;q('.cap').value=dv.cap;
  q('.chem').onchange=()=>{dv.chem=q('.chem').value;dv.save()};q('.cap').onchange=()=>{dv.cap=Math.max(1,+q('.cap').value||105);dv.save()};
+ q('.bcloud').onclick=()=>upload(dv,true);
  q('.bdis').onclick=()=>{dv.want=false;dv.running=false;try{dv.dev.gatt.disconnect()}catch(e){}};
  q('.bclr').onclick=()=>{if(confirm('Стереть историю и события этой BMS?')){dv.long=[];dv.events=[];dv.ahIn=dv.ahOut=0;dv.t0=Date.now();dv.save()}};
  const file=()=>new File([dv.csv()],`daly_${dv.name}_${new Date().toISOString().slice(0,16).replace(/[:T]/g,'-')}.csv`,{type:'text/csv'});
@@ -278,6 +298,10 @@ async function addDevice(all){audio();try{Notification.requestPermission&&Notifi
 $('add').onclick=()=>addDevice(false);$('addall').onclick=()=>addDevice(true);
 const ua=navigator.userAgent;if(/SamsungBrowser|YaBrowser|OPR\/|UCBrowser|MiuiBrowser|VivoBrowser|; wv\)|Telegram|FB_IAB|FBAN/i.test(ua))$('sup').textContent='Похоже, это не Google Chrome: Bluetooth может не работать. Откройте ссылку в Chrome.';
 if(!navigator.bluetooth){$('sup').textContent='Web Bluetooth недоступен: откройте страницу в Chrome на Android (или Chrome/Edge на компьютере) по адресу https.';$('add').disabled=$('addall').disabled=true}
+$('cloudOn').checked=localStorage.getItem('daly2:cloud')==='1';
+$('cloudOn').onchange=()=>{localStorage.setItem('daly2:cloud',$('cloudOn').checked?'1':'0');if($('cloudOn').checked&&!cloudUrl())glog('облако пока не настроено автором');$('cloudInfo').textContent=cloudUrl()?'':' (облако пока не подключено)'};
+$('cloudInfo').textContent=cloudUrl()?'':' (облако пока не подключено)';
+setInterval(uploadAll,300000);
 setInterval(()=>{$('clock').textContent=new Date().toLocaleTimeString();devs.forEach(upd)},2000);
 addEventListener('beforeunload',()=>devs.forEach(d=>d.save()));
 if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('sw.js').catch(()=>{});
