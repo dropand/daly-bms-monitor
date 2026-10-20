@@ -137,7 +137,7 @@ let wl=null;async function lock(){try{wl=await navigator.wakeLock.request('scree
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&devs.size)lock()});
 
 // ---------- облако (по согласию) ----------
-const CLOUD_URL='';   // адрес Google Apps Script; задаётся при публикации
+const CLOUD_URL='https://script.google.com/macros/s/AKfycby54kxPT5gWs_qx9VQ2ik9eq3DkxZ-ZsE5iaYbGoaHodTINODHj-A5DSdcxjROeEwHftA/exec';   // адрес Google Apps Script; задаётся при публикации
 const cloudUrl=()=>CLOUD_URL||localStorage.getItem('daly2:cloudurl')||'';
 const cloudOn=()=>localStorage.getItem('daly2:cloud')==='1'&&!!cloudUrl();
 const anon=(()=>{let a=localStorage.getItem('daly2:anon');if(!a){a=([...crypto.getRandomValues(new Uint8Array(6))].map(x=>x.toString(16).padStart(2,'0')).join(''));localStorage.setItem('daly2:anon',a)}return a})();
