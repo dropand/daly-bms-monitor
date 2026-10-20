@@ -16,17 +16,19 @@
 <body>
 <h1><span>Daly BMS монитор</span><small style="color:var(--mut);font-weight:400" id="clock"></small></h1>
 <div class="card" id="hero">
- <h2>Подключите любую Daly Smart BMS с Bluetooth-модулем</h2>
- <p class="note">Включите BMS (экран горит), закройте приложение Smart BMS, нажмите кнопку и выберите устройство <b>DL-…</b>. История и настройки хранятся на телефоне. Только чтение: в BMS приложение ничего не пишет.</p>
- <div class="row" style="justify-content:center"><button class="p" id="add">Добавить BMS</button><button id="addall">Показать все устройства</button></div>
+ <h2>Подключите Daly BMS</h2>
+ <p class="note">Включите BMS, закройте приложение Smart BMS и нажмите кнопку.</p>
+ <div class="row" style="justify-content:center"><button class="p big" id="add">Подключить BMS</button></div>
  <p class="note" id="sup"></p>
- <label class="note" style="display:block;text-align:left;margin-top:10px"><input type="checkbox" id="cloudOn"> Отправлять данные заряда автору приложения автоматически (анонимно), раз в минуту, без кнопок.
- <span id="cloudInfo"></span></label>
- <p class="note" style="text-align:left">Отправляется: напряжения ячеек, ток, события, химия и ёмкость, случайный номер сессии. Не отправляется: имя устройства, геолокация, контакты. По умолчанию выключено.</p>
+ <details class="more"><summary>Дополнительно</summary>
+  <label class="note" style="display:block;margin-top:8px"><input type="checkbox" id="cloudOn"> Отправлять данные заряда автору (анонимно)<span id="cloudInfo"></span></label>
+  <p class="note">Уходят только напряжения ячеек, ток и события. Имя устройства и геолокация не отправляются.</p>
+  <div class="row"><button id="addall">Показать все Bluetooth-устройства</button></div>
+ </details>
 </div>
 <div id="root"></div>
 <div id="toast" role="status" aria-live="polite"></div>
-<div class="card"><h2>Журнал</h2><div class="ev" id="log"></div></div>
+<details class="card"><summary>Журнал</summary><div class="ev" id="log"></div></details>
 
 <template id="tpl">
 <section>
