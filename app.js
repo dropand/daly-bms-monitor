@@ -86,7 +86,7 @@ class Dev{
  get C(){return CHEM[this.chem]}
  save(){try{localStorage.setItem(this.key,JSON.stringify({chem:this.chem,cap:this.cap,long:this.long.slice(-MAXLONG),events:this.events.slice(0,200),upT:this.upT,upE:this.upE,sent:this.sent,sentAt:this.sentAt}))}catch(e){glog('история не сохраняется: '+e)}}
  event(level,text){this.events.unshift({t:stamp(),level,text});if(this.events.length>200)this.events.pop();if(level==2)alarm(this.name+': '+text)}
- setOnline(on,err){if(on!==this.online){this.event(on?0:2,on?'связь установлена':'связь потеряна: '+(err||''))}this.online=on;if(!on)this.err=err||''}
+ setOnline(on,err){if(on!==this.online){this.event(on?0:1,on?'связь установлена':'связь потеряна: '+(err||''))}this.online=on;if(!on)this.err=err||''}
  async reconnect(){for(let i=0;this.want&&!this.running;i++){await sleep(Math.min(3000+i*1000,10000));if(!this.want||this.running)return;
    try{await this.connect()}catch(e){this.err='переподключаюсь… ('+(i+1)+')'}}}
  async connect(){

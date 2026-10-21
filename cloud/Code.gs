@@ -105,7 +105,7 @@ function doPost(e) {
       var text = safe_(x[2], 200), key = ts + '|' + text;
       if (known[key]) return;
       known[key] = 1;
-      if (lv === 2) alarms++;
+      if (lv === 2 && !/^связь/.test(text)) alarms++;   // потеря Bluetooth — не неисправность батареи
       evOut.push([now, b.sid, ts, lv, text]);
     });
     if (evOut.length) {
@@ -134,6 +134,37 @@ function doPost(e) {
 
 function out_(t) { return ContentService.createTextOutput(t); }
 
-function doGet() {
-  return out_('Daly BMS монитор: приём данных работает (используйте POST).');
+/**
+ * Чтение сводки владельцем. Включается свойством скрипта READ_KEY
+ * (Настройки проекта → Свойства скрипта). Без ключа отдаётся только строка о работе.
+ *   ?k=КЛЮЧ                      — лист sessions
+ *   ?k=КЛЮЧ&sid=ПРЕФИКС&n=200    — последние замеры и события сессии
+ */
+function doGet(e) {
+  var key = PropertiesService.getScriptProperties().getProperty('READ_KEY');
+  var p = (e && e.parameter) || {};
+  if (!key || !p.k || p.k !== key) return out_('Daly BMS монитор: приём данных работает (используйте POST).');
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  function rows_(name, filter, n) {
+    var sh = ss.getSheetByName(name);
+    if (!sh || sh.getLastRow() < 2) return [];
+    var vals = sh.getRange(1, 1, sh.getLastRow(), sh.getLastColumn()).getValues(), hdr = vals[0], out = [];
+    for (var i = vals.length - 1; i >= 1 && out.length < n; i--) {
+      if (filter && !filter(vals[i])) continue;
+      var o = {};
+      hdr.forEach(function (h, j) { o[h] = vals[i][j] instanceof Date ? vals[i][j].toISOString() : vals[i][j]; });
+      out.push(o);
+    }
+    return out.reverse();
+  }
+  var res = {};
+  if (p.sid) {
+    var n = Math.min(Number(p.n) || 200, 2000), sid = String(p.sid);
+    var f = function (r) { return String(r[1]).indexOf(sid) === 0; };
+    res.samples = rows_('samples', f, n);
+    res.events = rows_('events', f, 200);
+  } else {
+    res.sessions = rows_('sessions', null, 200);
+  }
+  return ContentService.createTextOutput(JSON.stringify(res)).setMimeType(ContentService.MimeType.JSON);
 }
