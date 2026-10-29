@@ -4,6 +4,17 @@
 
 **Открыть:** https://dropand.github.io/daly-bms-monitor/ — в Chrome на Android (или Chrome/Edge на ПК). Для установки значком: меню Chrome → «Добавить на главный экран».
 
+**Нет BMS под рукой?** Демо с симуляцией: https://dropand.github.io/daly-bms-monitor/?demo (работает в любом браузере).
+
+[English version](README.en.md)
+
+<p>
+  <img src="docs/screenshot-mobile.png" alt="Телефон (демо, симуляция)" width="260">
+  <img src="docs/screenshot-desktop.png" alt="ПК (демо, симуляция)" width="520">
+</p>
+
+*Скриншоты сделаны в демо-режиме на симулированных данных.*
+
 ## Что показывает
 - общий вердикт (работает правильно / внимание / неисправность) и оценку времени до конца заряда;
 - график заряда: идеал и реальный (напряжение и ток);
