@@ -48,11 +48,12 @@ const hash6=s=>{let h=5381;for(const c of s)h=((h<<5)+h+c.charCodeAt(0))>>>0;ret
 const MIN_GAP=60000;   // защита от частых отправок: не чаще раза в минуту с одного устройства
 function toast(msg,kind){const t=$('toast'),d=document.createElement('div');d.textContent=msg;if(kind)d.className=kind;t.appendChild(d);setTimeout(()=>d.remove(),4500);while(t.children.length>3)t.firstChild.remove()}
 const pending=dv=>({rows:dv.long.filter(x=>x[0]>dv.upT).length,evs:dv.events.filter(e=>e.t>dv.upE).length});
-function cloudLine(dv){if(!cloudOn())return localStorage.getItem('daly2:cloud')==='1'?'☁ облако не настроено':'☁ отправка в облако выключена';
+function cloudLine(dv){if(dv.demo)return'☁ демо: данные никуда не отправляются';if(!cloudOn())return localStorage.getItem('daly2:cloud')==='1'?'☁ облако не настроено':'☁ отправка в облако выключена';
  const p=pending(dv),when=dv.sentAt?new Date(dv.sentAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):'';
  const st=dv.sentOk===false?'последняя попытка не удалась':dv.sentAt?'последняя отправка '+when+(dv.sentOk===true?' ✓ подтверждена':' (без подтверждения)'):'ещё не отправляли';
  return `☁ отправлено ${dv.sent} замеров · ждёт отправки ${p.rows} · ${st}`}
 async function upload(dv,manual){
+ if(dv.demo){if(manual)toast('В демо ничего не отправляется');return}
  if(!cloudOn()){if(manual)toast(localStorage.getItem('daly2:cloud')==='1'?'Облако не настроено':'Включите галочку «Отправлять данные» на стартовом экране');return}
  if(dv.sending)return;const wait=MIN_GAP-(Date.now()-dv.lastTry);
  if(wait>0){if(manual)toast(`Слишком часто: подождите ${Math.ceil(wait/1000)} с`,'bad');return}
