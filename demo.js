@@ -11,7 +11,7 @@ function demoD(st,t,dt){const C=CHEM.lfp,mvA=735/DEMO.cap/1000;
   state:1,chg:1,dis:1,cap:+(st.s/100*DEMO.cap).toFixed(1),n:DEMO.n,charger:1,load:0,cycles:142,cells,
   bal:cells.map(v=>hi&&v>avg+5?1:0),fault:[0,0,0,0,0,0,0,0],asleep:false}}
 class DemoDev extends Dev{
- constructor(){super({id:'demo',name:'DEMO (симуляция)',addEventListener(){}});this.demo=true;this.chem='lfp';this.cap=DEMO.cap}
+ constructor(){super({id:'demo',name:tr('DEMO (симуляция)','DEMO (simulated)'),addEventListener(){}});this.demo=true;this.chem='lfp';this.cap=DEMO.cap}
  save(){}
  start(){const st={s:40,I:DEMO.iset,cv:false},T=Date.now()/1000-7200;
   for(let k=0;k<3600;k++)this.update(demoD(st,T+k*2,2));   // 2 часа «прошлого», чтобы графики не были пустыми
@@ -20,5 +20,5 @@ class DemoDev extends Dev{
  stop(){clearInterval(this.timer);this.running=false}}
 function exitDemo(dv){dv.stop();devs.delete('demo');const P=panels.get('demo');if(P)P.el.remove();panels.delete('demo');$('hero').style.display=''}
 $('demo').onclick=()=>{if(devs.has('demo'))return;const dv=new DemoDev();devs.set('demo',dv);$('hero').style.display='none';dv.start();upd(dv);
- panels.get('demo').q('.bdis').onclick=()=>exitDemo(dv);toast('Демо: данные симулируются, BMS не нужна','ok')};
+ panels.get('demo').q('.bdis').onclick=()=>exitDemo(dv);toast(tr('Демо: данные симулируются, BMS не нужна','Demo: data is simulated, no BMS needed'),'ok')};
 if(/[?&]demo\b/.test(location.search))$('demo').click();

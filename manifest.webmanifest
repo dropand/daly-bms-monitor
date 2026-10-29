@@ -1,7 +1,7 @@
 {
-  "name": "Daly BMS монитор",
+  "name": "Daly BMS Monitor",
   "short_name": "Daly BMS",
-  "description": "Монитор Daly Smart BMS по Bluetooth: графики заряда, ячейки, балансировка.",
+  "description": "Daly Smart BMS monitor over Bluetooth: charge charts, cells, balancing.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

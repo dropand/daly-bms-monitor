@@ -7,11 +7,11 @@ A web app (PWA) for phone and desktop that reads a **Daly Smart BMS** with a Blu
 **Open:** https://dropand.github.io/daly-bms-monitor/ in Chrome on Android, or Chrome/Edge on desktop.
 **No BMS at hand?** Try the simulated demo: https://dropand.github.io/daly-bms-monitor/?demo (works in any browser).
 
-> The interface is currently in Russian. English UI is not done yet; the charts, numbers and cell view are language-independent.
+The interface is available in **English and Russian**. The language is picked from your browser; use the RU/EN button in the header to switch (or add `?lang=en` / `?lang=ru` to the URL).
 
 <p>
-  <img src="docs/screenshot-mobile.png" alt="Mobile view (demo, simulated data)" width="260">
-  <img src="docs/screenshot-desktop.png" alt="Desktop view (demo, simulated data)" width="520">
+  <img src="docs/screenshot-en-mobile.png" alt="Mobile view (demo, simulated data)" width="260">
+  <img src="docs/screenshot-en-desktop.png" alt="Desktop view (demo, simulated data)" width="520">
 </p>
 
 *Screenshots are taken in demo mode with simulated data.*

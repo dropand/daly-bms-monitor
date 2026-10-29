@@ -6,7 +6,7 @@
 
 **Нет BMS под рукой?** Демо с симуляцией: https://dropand.github.io/daly-bms-monitor/?demo (работает в любом браузере).
 
-[English version](README.en.md)
+[English version](README.en.md) · интерфейс на русском и английском: язык выбирается по браузеру, переключатель RU/EN в шапке (или `?lang=en` / `?lang=ru` в адресе).
 
 <p>
   <img src="docs/screenshot-mobile.png" alt="Телефон (демо, симуляция)" width="260">
