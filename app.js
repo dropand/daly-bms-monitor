@@ -258,7 +258,8 @@ if(badBrowser){
  $('hero').innerHTML=`<h2>${tr('Откройте в Google Chrome','Open in Google Chrome')}</h2><p class="note">${msg}</p>`;
 }else{
  setInterval(uploadAll,60000);
- setInterval(()=>{$('clock').textContent=new Date().toLocaleTimeString();devs.forEach(upd)},2000);
+ setInterval(()=>devs.forEach(upd),2000);
  addEventListener('beforeunload',()=>devs.forEach(d=>d.save()));
 }
+setInterval(()=>{const d=new Date(),p=n=>String(n).padStart(2,'0');$('clock').textContent=`${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}.${p(Math.floor(d.getMilliseconds()/10))}`},50);
 if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('sw.js').catch(()=>{});
