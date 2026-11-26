@@ -47,7 +47,7 @@ details summary{cursor:pointer;color:var(--mut);font-size:13px}.ev{font:11px ui-
 .hero-top .nm{color:var(--mut);opacity:1}.hero-top h2{font-size:16px;font-weight:800;color:var(--fg);letter-spacing:.02em;margin:2px 0;cursor:default}.hero-top h2::after{display:none}
 .hero-top .note{margin:0;font-size:12px}
 .hero-body{padding:16px 18px;display:flex;flex-direction:column;gap:12px}
-.hero-chips{margin:0;gap:6px}.hero-chips .chip{background:var(--bg);font-size:12px;padding:4px 10px}
+.hero-chips{display:grid;grid-template-columns:repeat(3,1fr);margin:0;gap:6px}.hero-chips .chip{background:var(--bg);font-size:12px;padding:6px 4px;justify-content:center;white-space:nowrap}
 .hero-btn{width:100%}.hero-body #sup{margin:0;text-align:center}
 .hero-sub{justify-content:center;margin:0;gap:8px}.hero-sub button{font-size:12px;padding:6px 12px;color:var(--mut)}
 #hero>h2{font-size:19px;font-weight:700;color:var(--fg);text-transform:none;letter-spacing:0;margin:20px 20px 8px;cursor:default}#hero>h2::after{display:none}
