@@ -1,0 +1,14 @@
+# Локальное состояние и хуки инструментов
+/.claude/
+/.agents/
+/.githooks/
+
+# Выгрузки телеметрии BMS
+*.csv
+
+# Python / логи / ОС
+__pycache__/
+*.py[cod]
+.venv/
+*.log
+.DS_Store
