@@ -16,13 +16,16 @@
 <body>
 <h1><span>Daly BMS монитор</span><span><small style="color:var(--mut);font-weight:400" id="clock"></small><button id="lang" type="button" aria-label="Language" style="font-size:12px;padding:2px 8px;margin-left:8px"></button></span></h1>
 <div class="card" id="hero">
- <h2>Подключите Daly BMS</h2>
- <p class="note">Включите BMS, закройте приложение Smart BMS и нажмите кнопку.</p>
- <div class="row" style="justify-content:center"><button class="p big" id="add">Подключить BMS</button><button id="demo">Демо без BMS</button></div>
- <p class="note" id="sup"></p>
- <details class="more"><summary>Дополнительно</summary>
-  <div class="row"><button id="addall">Показать все Bluetooth-устройства</button></div>
- </details>
+ <div class="hero-top">
+  <div class="gz hero-gz"><svg viewBox="0 0 36 36"><circle class="g0" cx="18" cy="18" r="15.9155"/></svg><div class="gt"><b>–%</b></div></div>
+  <div class="bt"><div class="nm">Web Bluetooth · Read-Only</div><h2>Подключите Daly BMS</h2><p class="note">Включите BMS и закройте приложение Smart BMS.</p></div>
+ </div>
+ <div class="hero-body">
+  <div class="chips hero-chips"><span class="chip">⚡ Ячейки и перекос</span><span class="chip">⏱ Прогноз CC/CV</span><span class="chip">🛡 Защиты и журнал</span></div>
+  <button class="p big hero-btn" id="add">Подключить BMS</button>
+  <p class="note" id="sup"></p>
+  <div class="row hero-sub"><button id="demo">Демо без BMS</button><button id="addall">Все Bluetooth-устройства</button></div>
+ </div>
 </div>
 <div id="root"></div>
 <div id="toast" role="status" aria-live="polite"></div>
