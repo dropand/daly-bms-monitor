@@ -19,6 +19,6 @@ class DemoDev extends Dev{
   this.timer=setInterval(()=>this.update(demoD(st,Date.now()/1000,2)),2000)}
  stop(){clearInterval(this.timer);this.running=false}}
 function exitDemo(dv){dv.stop();devs.delete('demo');const P=panels.get('demo');if(P)P.el.remove();panels.delete('demo');$('hero').style.display=''}
-$('demo').onclick=()=>{if(devs.has('demo'))return;const dv=new DemoDev();devs.set('demo',dv);$('hero').style.display='none';dv.start();upd(dv);
- panels.get('demo').q('.bdis').onclick=()=>exitDemo(dv);toast(tr('Демо: данные симулируются, BMS не нужна','Demo: data is simulated, no BMS needed'),'ok')};
-if(/[?&]demo\b/.test(location.search))$('demo').click();
+if($('demo')){$('demo').onclick=()=>{if(devs.has('demo'))return;const dv=new DemoDev();devs.set('demo',dv);$('hero').style.display='none';dv.start();upd(dv);
+  panels.get('demo').q('.bdis').onclick=()=>exitDemo(dv);toast(tr('Демо: данные симулируются, BMS не нужна','Demo: data is simulated, no BMS needed'),'ok')};
+ if(/[?&]demo\b/.test(location.search))$('demo').click()}

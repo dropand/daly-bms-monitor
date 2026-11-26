@@ -48,19 +48,19 @@ document.addEventListener('visibilitychange',()=>{if(document.visibilityState===
 // ---------- облако (по согласию) ----------
 const CLOUD_URL='https://script.google.com/macros/s/AKfycby54kxPT5gWs_qx9VQ2ik9eq3DkxZ-ZsE5iaYbGoaHodTINODHj-A5DSdcxjROeEwHftA/exec';   // адрес Google Apps Script; задаётся при публикации
 const cloudUrl=()=>CLOUD_URL||localStorage.getItem('daly2:cloudurl')||'';
-const cloudOn=()=>localStorage.getItem('daly2:cloud')==='1'&&!!cloudUrl();
+const cloudOn=()=>!!cloudUrl();
 const anon=(()=>{let a=localStorage.getItem('daly2:anon');if(!a){a=([...crypto.getRandomValues(new Uint8Array(6))].map(x=>x.toString(16).padStart(2,'0')).join(''));localStorage.setItem('daly2:anon',a)}return a})();
 const hash6=s=>{let h=5381;for(const c of s)h=((h<<5)+h+c.charCodeAt(0))>>>0;return h.toString(16).padStart(8,'0')};
 const MIN_GAP=60000;   // защита от частых отправок: не чаще раза в минуту с одного устройства
 function toast(msg,kind){const t=$('toast'),d=document.createElement('div');d.textContent=msg;if(kind)d.className=kind;t.appendChild(d);setTimeout(()=>d.remove(),4500);while(t.children.length>3)t.firstChild.remove()}
 const pending=dv=>({rows:dv.long.filter(x=>x[0]>dv.upT).length,evs:dv.events.filter(e=>e.t>dv.upE).length});
-function cloudLine(dv){if(dv.demo)return tr('☁ демо: данные никуда не отправляются','☁ demo: nothing is sent anywhere');if(!cloudOn())return localStorage.getItem('daly2:cloud')==='1'?tr('☁ облако не настроено','☁ cloud not configured'):tr('☁ отправка в облако выключена','☁ cloud upload is off');
+function cloudLine(dv){if(dv.demo)return tr('☁ демо: данные никуда не отправляются','☁ demo: nothing is sent anywhere');if(!cloudOn())return tr('☁ облако не настроено','☁ cloud not configured');
  const p=pending(dv),when=dv.sentAt?new Date(dv.sentAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):'';
  const st=dv.sentOk===false?tr('последняя попытка не удалась','last attempt failed'):dv.sentAt?tr('последняя отправка ','last upload ')+when+(dv.sentOk===true?tr(' ✓ подтверждена',' ✓ confirmed'):tr(' (без подтверждения)',' (unconfirmed)')):tr('ещё не отправляли','nothing uploaded yet');
  return tr(`☁ отправлено ${dv.sent} замеров · ждёт отправки ${p.rows} · ${st}`,`☁ uploaded ${dv.sent} samples · pending ${p.rows} · ${st}`)}
 async function upload(dv,manual){
  if(dv.demo){if(manual)toast(tr('В демо ничего не отправляется','Nothing is sent in demo mode'));return}
- if(!cloudOn()){if(manual)toast(localStorage.getItem('daly2:cloud')==='1'?tr('Облако не настроено','Cloud not configured'):tr('Включите галочку «Отправлять данные» на стартовом экране','Tick "Send charge data" on the start screen'));return}
+ if(!cloudOn()){if(manual)toast(tr('Облако не настроено','Cloud not configured'));return}
  if(dv.sending)return;const wait=MIN_GAP-(Date.now()-dv.lastTry);
  if(wait>0){if(manual)toast(tr(`Слишком часто: подождите ${Math.ceil(wait/1000)} с`,`Too often: wait ${Math.ceil(wait/1000)} s`),'bad');return}
  const p=pending(dv);if(!p.rows&&!p.evs){if(manual)toast(tr('Всё уже отправлено, новых данных нет','Everything is already uploaded'),'ok');return}
@@ -232,18 +232,22 @@ async function addDevice(all){audio();try{Notification.requestPermission&&Notifi
   try{await dv.connect()}catch(e){dv.err=String(e.message||e);glog(dv.name+': '+dv.err);dv.reconnect()}
  }catch(e){glog(tr('не подключилось: ','could not connect: ')+e.message);if(/not supported on this platform/i.test(e.message))$('sup').innerHTML=tr('<b>Этот браузер не поддерживает Bluetooth.</b> Откройте ссылку в Google Chrome (не во встроенном браузере телефона, не в Яндексе, Samsung Internet или Telegram). В Android включите Bluetooth и геолокацию, дайте Chrome разрешение «Устройства поблизости».','<b>This browser does not support Bluetooth.</b> Open the link in Google Chrome (not in an in-app browser, Yandex, Samsung Internet or Telegram). On Android turn on Bluetooth and location and allow Chrome the "Nearby devices" permission.')}}
 $('add').onclick=()=>addDevice(false);$('addall').onclick=()=>addDevice(true);
-const ua=navigator.userAgent;if(/SamsungBrowser|YaBrowser|OPR\/|UCBrowser|MiuiBrowser|VivoBrowser|; wv\)|Telegram|FB_IAB|FBAN/i.test(ua))$('sup').textContent=tr('Похоже, это не Google Chrome: Bluetooth может не работать. Откройте ссылку в Chrome.','This does not look like Google Chrome: Bluetooth may not work. Open the link in Chrome.');
-if(!navigator.bluetooth){$('sup').textContent=tr('Web Bluetooth недоступен: откройте страницу в Chrome на Android (или Chrome/Edge на компьютере) по адресу https. Демо работает и без Bluetooth.','Web Bluetooth is unavailable: open the page over https in Chrome on Android (or Chrome/Edge on desktop). The demo works without Bluetooth.');$('add').disabled=$('addall').disabled=true}
-$('cloudOn').checked=localStorage.getItem('daly2:cloud')==='1';
-$('cloudOn').onchange=()=>{localStorage.setItem('daly2:cloud',$('cloudOn').checked?'1':'0');if($('cloudOn').checked&&!cloudUrl())glog(tr('облако пока не настроено автором','cloud is not configured by the author yet'));$('cloudInfo').textContent=cloudUrl()?'':tr(' (облако пока не подключено)',' (cloud not connected yet)')};
-$('cloudInfo').textContent=cloudUrl()?'':tr(' (облако пока не подключено)',' (cloud not connected yet)');
-const DICT={'Daly BMS монитор':'Daly BMS Monitor','Подключите Daly BMS':'Connect your Daly BMS','Включите BMS, закройте приложение Smart BMS и нажмите кнопку.':'Turn the BMS on, close the Smart BMS app and press the button.','Подключить BMS':'Connect BMS','Демо без BMS':'Demo without a BMS','Дополнительно':'More','Отправлять данные заряда автору (анонимно)':'Send charge data to the author (anonymous)','Уходят только напряжения ячеек, ток и события. Имя устройства и геолокация не отправляются.':'Only cell voltages, current and events are sent. Device name and location are never sent.','Показать все Bluetooth-устройства':'Show all Bluetooth devices','Журнал':'Log','заряд, ≈%':'charge, ≈%','Заряд: идеал и сейчас':'Charge: ideal vs now','сейчас':'now','идеал':'ideal','предел ячейки':'cell limit','Ячейки и балансировка':'Cells and balancing','■ выше среднего':'■ above average','■ ниже среднего':'■ below average','⚖ балансир работает':'⚖ balancing active','Перекос ячеек':'Cell spread','■ цель ≤30 мВ':'■ target ≤30 mV','■ допуск ≤150':'■ limit ≤150','Ресурс':'Lifetime','Настройки и данные':'Settings and data','Химия':'Chemistry','Ёмкость, А·ч':'Capacity, Ah','Скачать CSV':'Download CSV','Поделиться':'Share','Отправить сейчас':'Upload now','Очистить историю':'Clear history','Отключить':'Disconnect','Ёмкость нужна для оценки времени до конца заряда и «идеальной» кривой. Химия задаёт предел ячейки (3,65 В для LiFePO4, 4,2 В для NMC).':'Capacity is used for the time-to-full estimate and the "ideal" curve. Chemistry sets the cell limit (3.65 V for LiFePO4, 4.2 V for NMC).','События':'Events'};
+const ua=navigator.userAgent,isIOS=/iPhone|iPad|iPod/i.test(ua)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+const badBrowser=isIOS||!navigator.bluetooth||!/Chrome\/|Edg\//i.test(ua)||/SamsungBrowser|YaBrowser|OPR\/|UCBrowser|MiuiBrowser|VivoBrowser|; wv\)|Telegram|FB_IAB|FBAN/i.test(ua);
+const DICT={'Daly BMS монитор':'Daly BMS Monitor','Подключите Daly BMS':'Connect your Daly BMS','Включите BMS, закройте приложение Smart BMS и нажмите кнопку.':'Turn the BMS on, close the Smart BMS app and press the button.','Подключить BMS':'Connect BMS','Демо без BMS':'Demo without a BMS','Дополнительно':'More','Показать все Bluetooth-устройства':'Show all Bluetooth devices','Журнал':'Log','заряд, ≈%':'charge, ≈%','Заряд: идеал и сейчас':'Charge: ideal vs now','сейчас':'now','идеал':'ideal','предел ячейки':'cell limit','Ячейки и балансировка':'Cells and balancing','■ выше среднего':'■ above average','■ ниже среднего':'■ below average','⚖ балансир работает':'⚖ balancing active','Перекос ячеек':'Cell spread','■ цель ≤30 мВ':'■ target ≤30 mV','■ допуск ≤150':'■ limit ≤150','Ресурс':'Lifetime','Настройки и данные':'Settings and data','Химия':'Chemistry','Ёмкость, А·ч':'Capacity, Ah','Скачать CSV':'Download CSV','Поделиться':'Share','Отправить сейчас':'Upload now','Очистить историю':'Clear history','Отключить':'Disconnect','Ёмкость нужна для оценки времени до конца заряда и «идеальной» кривой. Химия задаёт предел ячейки (3,65 В для LiFePO4, 4,2 В для NMC).':'Capacity is used for the time-to-full estimate and the "ideal" curve. Chemistry sets the cell limit (3.65 V for LiFePO4, 4.2 V for NMC).','События':'Events'};
 function trDom(root){if(LANG==='ru')return;const w=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);let n;while(n=w.nextNode()){const s=n.nodeValue.trim();if(DICT[s])n.nodeValue=n.nodeValue.replace(s,DICT[s])}}
 document.documentElement.lang=LANG;trDom(document.body);
 if(LANG==='en'){document.title='Daly BMS Monitor';const m=document.querySelector('meta[name=description]');if(m)m.content='Daly Smart BMS monitor over Bluetooth: charge charts, cells, balancing, checks.'}
 $('lang').textContent=LANG==='ru'?'EN':'RU';
 $('lang').onclick=()=>{try{localStorage.setItem('daly2:lang',LANG==='ru'?'en':'ru')}catch(e){}const q=new URLSearchParams(location.search);q.delete('lang');location.search=q.toString()};
-setInterval(uploadAll,60000);
-setInterval(()=>{$('clock').textContent=new Date().toLocaleTimeString();devs.forEach(upd)},2000);
-addEventListener('beforeunload',()=>devs.forEach(d=>d.save()));
+if(badBrowser){
+ const msg=isIOS?tr('На iPhone и iPad работа с Bluetooth (Web Bluetooth) в браузерах, включая Chrome, не поддерживается. Откройте сайт в Google Chrome на Android или в Chrome / Edge на компьютере.','On iPhone and iPad, Web Bluetooth is not supported in browsers (including Chrome). Open this site in Google Chrome on Android or in Chrome / Edge on a computer.')
+  :tr('Этот браузер не поддерживается. Откройте сайт в Google Chrome на Android или в Chrome / Edge на компьютере.','This browser is not supported. Open this site in Google Chrome on Android or in Chrome / Edge on a computer.');
+ document.querySelectorAll('#root,body>details').forEach(e=>e.remove());
+ $('hero').innerHTML=`<h2>${tr('Откройте в Google Chrome','Open in Google Chrome')}</h2><p class="note">${msg}</p>`;
+}else{
+ setInterval(uploadAll,60000);
+ setInterval(()=>{$('clock').textContent=new Date().toLocaleTimeString();devs.forEach(upd)},2000);
+ addEventListener('beforeunload',()=>devs.forEach(d=>d.save()));
+}
 if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('sw.js').catch(()=>{});
