@@ -2,7 +2,7 @@
 
 [Русская версия](README.md)
 
-A web app (PWA) for phone and desktop that reads a **Daly Smart BMS** with a Bluetooth module (device name `DL-…`) over Web Bluetooth and shows charge progress, cells, balancing and health checks. **Read-only: nothing is ever written to the BMS.**
+A web app (PWA) for phone and desktop that works with a **Daly Smart BMS** with a Bluetooth module (device name `DL-…`) over Web Bluetooth: shows charge progress, cells, balancing and health checks, and optionally controls charge/discharge switches and BMS reset after confirmation.
 
 **Open:** https://dropand.github.io/daly-bms-monitor/ in Chrome on Android, or Chrome/Edge on desktop.
 **No BMS at hand?** Try the simulated demo: https://dropand.github.io/daly-bms-monitor/?demo (works in any browser).
@@ -35,8 +35,8 @@ The interface is available in **English and Russian**. The language is picked fr
 - Limits (cell voltage, 0.1–0.3C charge current, charge curve) are typical values. Check them against your battery's datasheet.
 - Protocol: open Daly UART (commands `0x90`–`0x98`); the protection bit layout was checked against the [dalybms](https://github.com/dreadnought/python-daly-bms) library.
 
-## Optional cloud upload
-Off by default. If you enable it, anonymous charge data (cell voltages, current, events, chemistry, capacity, a random session id) is sent to a Google Sheet. Device name, location and contacts are never sent. Setup of your own receiver: [cloud/README.md](cloud/README.md). Security notes: [SECURITY.md](SECURITY.md).
+## Cloud telemetry
+When connected to a real BMS (never in demo mode), anonymous charge data (cell voltages, current, events, chemistry, capacity, BMS code if available, and a random session id) is automatically sent to a Google Sheet. Device name, location and contacts are never sent. Setup of your own receiver: [cloud/README.md](cloud/README.md). Security notes: [SECURITY.md](SECURITY.md).
 
 ## Contributing
 Bug reports are welcome, especially from other Daly models. Please include the model, firmware, browser and the Journal contents from the app.

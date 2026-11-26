@@ -60,8 +60,8 @@ function doPost(e) {
     if (!raw || raw.length > MAX_BODY) return out_('bad');
     var b = JSON.parse(raw);
     if (!b || b.v !== 1 || typeof b.sid !== 'string' || !/^[A-Za-z0-9-]{8,64}$/.test(b.sid)) return out_('bad');
-    if (limited_(b.sid)) return out_('limit');
     lock.waitLock(20000);
+    if (limited_(b.sid)) return out_('limit');
 
     var now = new Date(), nowS = now.getTime() / 1000, chem = b.chem === 'nmc' ? 'nmc' : 'lfp';
     var cap = num_(b.cap, 1, 2000), cycles = num_(b.cycles, 0, 100000);
@@ -124,7 +124,7 @@ function doPost(e) {
       var text = safe_(x[2], 200), key = ts + '|' + text;
       if (known[key]) return;
       known[key] = 1;
-      if (lv === 2 && !/^связь/.test(text)) alarms++;   // потеря Bluetooth — не неисправность батареи
+      if (lv === 2 && !/^(связь|connection)/i.test(text)) alarms++;   // потеря Bluetooth — не неисправность батареи
       evOut.push([now, b.sid, ts, lv, text]);
     });
     if (evOut.length) {
@@ -179,20 +179,26 @@ function doGet(e) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   function rows_(name, filter, n) {
     var sh = ss.getSheetByName(name);
-    if (!sh || sh.getLastRow() < 2) return [];
-    var vals = sh.getRange(1, 1, sh.getLastRow(), sh.getLastColumn()).getValues(), hdr = vals[0], out = [];
-    for (var i = vals.length - 1; i >= 1 && out.length < n; i--) {
-      if (filter && !filter(vals[i])) continue;
-      var o = {};
-      hdr.forEach(function (h, j) { o[h] = vals[i][j] instanceof Date ? vals[i][j].toISOString() : vals[i][j]; });
-      out.push(o);
+    if (!sh) return [];
+    var lastRow = sh.getLastRow(), lastCol = sh.getLastColumn();
+    if (lastRow < 2 || lastCol < 1) return [];
+    var hdr = sh.getRange(1, 1, 1, lastCol).getValues()[0], out = [], chunk = 2000;
+    for (var end = lastRow; end >= 2 && out.length < n; end -= chunk) {
+      var start = Math.max(2, end - chunk + 1);
+      var vals = sh.getRange(start, 1, end - start + 1, lastCol).getValues();
+      for (var i = vals.length - 1; i >= 0 && out.length < n; i--) {
+        if (filter && !filter(vals[i])) continue;
+        var o = {};
+        hdr.forEach(function (h, j) { o[h] = vals[i][j] instanceof Date ? vals[i][j].toISOString() : vals[i][j]; });
+        out.push(o);
+      }
     }
     return out.reverse();
   }
   var res = {};
   if (p.sid) {
     var n = Math.min(Number(p.n) || 200, 2000), sid = String(p.sid);
-    var f = function (r) { return String(r[1]).indexOf(sid) === 0; };
+    var f = function (r) { return String(r[1]) === sid; };
     res.samples = rows_('samples', f, n);
     res.events = rows_('events', f, 200);
   } else {
