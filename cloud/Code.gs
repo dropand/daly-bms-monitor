@@ -68,15 +68,16 @@ function doPost(e) {
     var idx = ids.indexOf(b.sid), row = idx >= 0 ? ss.getRange(idx + 2, 1, 1, 16).getValues()[0] : null;
     var water = row && row[13] instanceof Date ? row[13].getTime() / 1000 : 0;
 
-    var good = [], seen = {}, i;
-    (Array.isArray(b.rows) ? b.rows : []).slice(0, MAX_ROWS).forEach(function (r) {
+    var good = [], seen = {}, i, xArr = Array.isArray(b.x) ? b.x : [];
+    (Array.isArray(b.rows) ? b.rows : []).slice(0, MAX_ROWS).forEach(function (r, idx) {
       if (!Array.isArray(r) || r.length < 3 || r.length > 18) return;
       var t = num_(r[0], nowS - 7 * 86400, nowS + 3600), I = num_(r[1], -500, 500);
       if (t === null || I === null || t <= water || seen[t]) return;
       var cells = [];
       for (i = 2; i < r.length; i++) { var c = num_(r[i], 0, 6000); if (c === null) return; cells.push(Math.round(c)); }
       seen[t] = 1;
-      good.push({t: Math.round(t), I: I, cells: cells});
+      var xm = xArr[idx] && typeof xArr[idx] === 'object' ? xArr[idx] : {};
+      good.push({t: Math.round(t), I: I, cells: cells, x: xm});
     });
     good.sort(function (x, y) { return x.t - y.t; });
 
@@ -84,12 +85,22 @@ function doPost(e) {
     if (n) {
       var hdr = ['server_time', 'session', 'time', 'I_A', 'cells'];
       for (i = 1; i <= 16; i++) hdr.push('c' + i);
-      var sh = sheet_('samples', hdr), w = 5 + 16, outRows = good.map(function (g) {
+      var extHdr = ['V_bms', 'soc_bms', 'tmin_C', 'tmax_C', 'state', 'chg', 'dis', 'charger', 'load', 'cap_bms', 'bal', 'fault_hex'];
+      hdr = hdr.concat(extHdr);
+      var sh = sheet_('samples', hdr), w = hdr.length;
+      if (sh.getLastColumn() < w) sh.getRange(1, 1, 1, w).setValues([hdr]);
+      var outRows = good.map(function (g) {
         maxCell = Math.max(maxCell, Math.max.apply(null, g.cells));
         minCell = Math.min(minCell, Math.min.apply(null, g.cells));
         sumI += g.I; maxI = Math.max(maxI, g.I); last = g;
         var r = [now, b.sid, new Date(g.t * 1000), g.I, g.cells.length].concat(g.cells);
-        while (r.length < w) r.push('');
+        while (r.length < 5 + 16) r.push('');
+        var m = g.x || {}, bv = function (v, lo, hi) { var z = num_(v, lo, hi); return z === null ? '' : z; };
+        r.push(
+          bv(m.V, 0, 200), bv(m.soc, 0, 100), bv(m.tmin, -60, 150), bv(m.tmax, -60, 150),
+          bv(m.st, 0, 10), bv(m.chg, 0, 1), bv(m.dis, 0, 1), bv(m.chgr, 0, 1), bv(m.load, 0, 1),
+          bv(m.cap, 0, 5000), safe_(m.bal || '', 64), safe_(m.flt || '', 32)
+        );
         return r;
       });
       sh.getRange(sh.getLastRow() + 1, 1, outRows.length, w).setValues(outRows);

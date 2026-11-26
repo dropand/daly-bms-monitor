@@ -65,7 +65,7 @@ async function upload(dv,manual){
  if(wait>0){if(manual)toast(tr(`Слишком часто: подождите ${Math.ceil(wait/1000)} с`,`Too often: wait ${Math.ceil(wait/1000)} s`),'bad');return}
  const p=pending(dv);if(!p.rows&&!p.evs){if(manual)toast(tr('Всё уже отправлено, новых данных нет','Everything is already uploaded'),'ok');return}
  const rows=dv.long.filter(x=>x[0]>dv.upT).slice(0,500),evs=dv.events.filter(e=>e.t>dv.upE).reverse().slice(0,100);
- const body=JSON.stringify({v:1,sid:anon+'-'+hash6(dv.id),chem:dv.chem,cap:dv.cap,cycles:dv.last&&dv.last.cycles,rows:rows.map(x=>[x[0],x[1],...x[2]]),events:evs.map(e=>[e.t,e.level,e.text])});
+ const body=JSON.stringify({v:1,sid:anon+'-'+hash6(dv.id),chem:dv.chem,cap:dv.cap,cycles:dv.last&&dv.last.cycles,rows:rows.map(x=>[x[0],x[1],...x[2]]),x:rows.map(x=>{const m=x[4]||{},b=(x[3]||[]).map((v,i)=>v?i+1:0).filter(Boolean).join(',');return{V:m.V,soc:m.soc,tmin:m.tmin,tmax:m.tmax,st:m.st,chg:m.chg,dis:m.dis,chgr:m.chgr,load:m.load,cap:m.cap,bal:b,flt:m.flt||''}}),events:evs.map(e=>[e.t,e.level,e.text])});
  dv.sending=true;dv.lastTry=Date.now();let confirmed=false;
  try{try{const r=await fetch(cloudUrl(),{method:'POST',headers:{'Content-Type':'text/plain'},body,referrerPolicy:'no-referrer',credentials:'omit'}),t=(await r.text()).trim();
     if(t!=='ok')throw new Error(t.slice(0,80)||tr('пустой ответ','empty response'));confirmed=true}
@@ -150,7 +150,7 @@ class Dev{
   if(this.prev&&!d.asleep){const dt=Math.min(d.t-this.prev.t,10);if(d.I>0)this.ahIn+=d.I*dt/3600;else this.ahOut+=-d.I*dt/3600}
   this.detect(d);this.hist.push(d);if(this.hist.length>1800)this.hist.shift();
   this.checks=this.evaluate(d);this.level=Math.max(...this.checks.map(c=>c.level));
-  if(!d.asleep&&d.cells.length&&d.t-this.longT>=LONG_STEP){this.longT=d.t;this.long.push([Math.round(d.t),d.I,d.cells,d.bal]);if(this.long.length>MAXLONG)this.long.shift();if(this.long.length%4===0)this.save()}
+  if(!d.asleep&&d.cells.length&&d.t-this.longT>=LONG_STEP){this.longT=d.t;const flt=(d.fault||[]).map(b=>b.toString(16).padStart(2,'0')).join('');this.long.push([Math.round(d.t),d.I,d.cells,d.bal,{V:d.V,soc:d.soc,tmin:d.tmin,tmax:d.tmax,st:d.state,chg:d.chg,dis:d.dis,chgr:d.charger,load:d.load,cap:d.cap,flt:/^0*$/.test(flt)?'':flt}]);if(this.long.length>MAXLONG)this.long.shift();if(this.long.length%4===0)this.save()}
   this.prev=this.last=d;this.err=''}
  metrics(){const d=this.last;if(!d||d.asleep||!d.cells.length)return null;const C=this.C,cs=d.cells,I=d.I,mvA=735/this.cap;
   const avg=cs.reduce((a,b)=>a+b,0)/cs.length,soc=ocvSoc(C.ocv,(avg-mvA*Math.max(I,0))/1000);
@@ -161,8 +161,8 @@ class Dev{
   const f=this.long[0],first=f?f[2]:null,i0=f?f[1]:0,s0=f?ocvSoc(C.ocv,(first.reduce((a,b)=>a+b,0)/first.length-mvA*Math.max(i0,0))/1000):0;
   const cur=this.long.map(x=>x[1]).filter(x=>x>.3).sort((a,b)=>a-b);
   return{phase,soc:Math.round(soc),eta:eta==null?null:Math.round(eta),cycles:d.cycles,cap:this.cap,n:cs.length,s0,iset:cur.length?cur[cur.length>>1]:0,ahIn:this.ahIn,ahOut:this.ahOut,capBms:d.cap}}
- csv(){const nc=Math.max(0,...this.long.map(x=>x[2].length)),h='time,I,sum_V,'+Array.from({length:nc},(_,i)=>'c'+(i+1)).join(',')+'\n';
-  return h+this.long.map(x=>[new Date(x[0]*1000).toISOString(),x[1],(x[2].reduce((a,b)=>a+b,0)/1000).toFixed(3),...x[2]].join(',')).join('\n')+'\n\nevents\n'+this.events.map(e=>[e.t,e.level,'"'+e.text+'"'].join(',')).join('\n')}
+ csv(){const nc=Math.max(0,...this.long.map(x=>x[2].length)),h='time,I,sum_V,'+Array.from({length:nc},(_,i)=>'c'+(i+1)).join(',')+',V_bms,soc_bms,tmin,tmax,state,chg,dis,charger,load,cap_bms,bal,fault_hex\n';
+  return h+this.long.map(x=>{const m=x[4]||{},b=(x[3]||[]).map((v,i)=>v?i+1:0).filter(Boolean).join(';');return[new Date(x[0]*1000).toISOString(),x[1],(x[2].reduce((a,b)=>a+b,0)/1000).toFixed(3),...x[2],m.V??'',m.soc??'',m.tmin??'',m.tmax??'',m.st??'',m.chg??'',m.dis??'',m.chgr??'',m.load??'',m.cap??'',b,m.flt??''].join(',')}).join('\n')+'\n\nevents\n'+this.events.map(e=>[e.t,e.level,'"'+e.text+'"'].join(',')).join('\n')}
 }
 
 // ---------- графики ----------
