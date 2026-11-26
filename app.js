@@ -19,7 +19,7 @@ const CHEM={
  nmc:{name:'Li-ion NMC',vmax:4200,hiWarn:4150,loWarn:3200,loBad:2800,top:4100,
   ocv:[[3.00,0],[3.30,5],[3.50,20],[3.60,35],[3.70,50],[3.80,65],[3.90,77],[4.00,88],[4.10,95],[4.20,100]]}
 };
-const NEN={'BMS отвечает':'BMS responds','Сумма ячеек = сборка':'Cells sum = pack','Ячейки в пределах':'Cells in range','Перекос ячеек':'Cell spread','Температура':'Temperature','Защиты BMS':'BMS protections','Ключ заряда':'Charge switch','Заряд идёт':'Charging','Обрыв заряда':'Charge interruption','Ток заряда':'Charge current','Балансировка у верха':'Top balancing'};
+const NEN={'BMS отвечает':'BMS responds','Сумма ячеек = сборка':'Cells sum = pack','Ячейки в пределах':'Cells in range','Перекос ячеек':'Cell spread','Температура':'Temperature','Защиты BMS':'BMS protections','Ключ заряда':'Charge switch','Ключ разряда':'Discharge switch','Контакт балансира':'Balance tap','Обрыв отвода ячейки':'Open balance lead','Малый ток (мёртвая зона)':'Low-current deadband','Заряд идёт':'Charging','Обрыв заряда':'Charge interruption','Ток заряда':'Charge current','Балансировка у верха':'Top balancing'};
 const SPREAD_WARN=150,SPREAD_BAD=300,TOP_SPREAD=60,T_WARN=45,T_BAD=55,SUM_TOL=.5,RISE_MIN=2,DROP_V=.3;
 const FAULTS=[[0,[0,1],"перенапряжение ячейки"],[0,[2,3],"недонапряжение ячейки"],[0,[4,5],"перенапряжение сборки"],[0,[6,7],"недонапряжение сборки"],
  [1,[0,1],"перегрев при заряде"],[1,[2,3],"холод при заряде"],[1,[4,5],"перегрев при разряде"],[1,[6,7],"холод при разряде"],
@@ -30,7 +30,7 @@ const FAULTS=[[0,[0,1],"перенапряжение ячейки"],[0,[2,3],"н
 const FEN={'перенапряжение ячейки':'cell overvoltage','недонапряжение ячейки':'cell undervoltage','перенапряжение сборки':'pack overvoltage','недонапряжение сборки':'pack undervoltage','перегрев при заряде':'overtemperature (charge)','холод при заряде':'undertemperature (charge)','перегрев при разряде':'overtemperature (discharge)','холод при разряде':'undertemperature (discharge)','перегрузка заряда':'charge overcurrent','перегрузка разряда':'discharge overcurrent','SOC высокий':'SOC high','SOC низкий':'SOC low','перекос напряжений':'voltage imbalance','перекос температур':'temperature imbalance','перегрев ключа заряда':'charge MOSFET overheat','перегрев ключа разряда':'discharge MOSFET overheat','датчик ключа заряда':'charge MOSFET sensor','датчик ключа разряда':'discharge MOSFET sensor','залип ключ заряда':'charge MOSFET stuck','залип ключ разряда':'discharge MOSFET stuck','обрыв ключа заряда':'charge MOSFET open','обрыв ключа разряда':'discharge MOSFET open','сбой AFE':'AFE failure','ячейка не читается':'cell read failure','датчик температуры':'temperature sensor','EEPROM':'EEPROM','RTC':'RTC','предзаряд':'precharge','связь':'communication','внутренняя связь':'internal communication','датчик тока':'current sensor','датчик напряжения':'voltage sensor','короткое замыкание':'short circuit','заряд запрещён: низкое напряжение':'charging inhibited: low voltage'};
 const tf=n=>LANG==='ru'?n:(FEN[n]||n);
 const SOFT=['SOC низкий','SOC высокий'].map(tf);
-function decodeFaults(b){const o=[];if(!b)return o;FAULTS.forEach(([by,bits,n])=>bits.forEach((bit,l)=>{if(by<b.length&&(b[by]>>bit)&1)o.push(tf(n)+(bits.length>1?tr(' (ур. ',' (lvl ')+(l+1)+')':''))}));return o}
+function decodeFaults(b){const o=[];if(!b)return o;FAULTS.forEach(([by,bits,n])=>bits.forEach((bit,l)=>{if(by<b.length&&(b[by]>>bit)&1)o.push(tf(n)+(bits.length>1?tr(' (ур. ',' (lvl ')+(l+1)+')':''))}));if(b.length>7&&b[7])o.push(tr('код ошибки: ','fault code: ')+b[7]);return o}
 const ocvSoc=(tab,v)=>{if(v<=tab[0][0])return 0;for(let i=1;i<tab.length;i++){if(v<=tab[i][0]){const a=tab[i-1],b=tab[i];return a[1]+(b[1]-a[1])*(v-a[0])/(b[0]-a[0])}}return 100};
 const ocvV=(tab,s)=>{if(s<=0)return tab[0][0];for(let i=1;i<tab.length;i++){if(s<=tab[i][1]){const a=tab[i-1],b=tab[i];return a[0]+(b[0]-a[0])*(s-a[1])/(b[1]-a[1])}}return tab[tab.length-1][0]};
 
@@ -79,7 +79,7 @@ const uploadAll=m=>devs.forEach(d=>upload(d,m));
 // ---------- BMS ----------
 class Dev{
  constructor(device){this.dev=device;this.id=device.id;this.name=device.name||device.id;this.key='daly2:'+device.id;
-  this.buf=[];this.frames=[];this.waiter=null;this.q=Promise.resolve();this.hist=[];this.long=[];this.events=[];this.chem='lfp';this.cap=105;
+  this.buf=[];this.frames=[];this.waiter=null;this.rx=null;this._onData=e=>this.onData(e);this.q=Promise.resolve();this.hist=[];this.long=[];this.events=[];this.chem='lfp';this.cap=105;
   this.last=null;this.prev=null;this.online=false;this.err=tr('подключение…','connecting…');this.want=true;this.running=false;this.badUntil=0;
   this.ahIn=0;this.ahOut=0;this.t0=Date.now();this.longT=0;this.checks=[];this.level=3;
   this.upT=0;this.upE='';this.sent=0;this.sentAt=0;this.sentOk=null;this.lastTry=0;this.sending=false;
@@ -89,7 +89,7 @@ class Dev{
    this.events=(Array.isArray(s.events)?s.events:[]).filter(e=>e&&typeof e.t==='string'&&typeof e.text==='string').slice(0,200).map(e=>({t:e.t.slice(0,25),level:e.level|0,text:e.text.slice(0,200)}));
    this.upT=num(s.upT)?s.upT:0;this.upE=typeof s.upE==='string'?s.upE.slice(0,25):'';this.sent=num(s.sent)?s.sent:0;this.sentAt=num(s.sentAt)?s.sentAt:0;
    this.longT=this.long.length?this.long[this.long.length-1][0]:0}catch(e){}
-  device.addEventListener('gattserverdisconnected',()=>{this.running=false;this.setOnline(false,tr('связь потеряна','connection lost'));upload(this);if(this.want)this.reconnect()})}
+  device.addEventListener('gattserverdisconnected',()=>{this.running=false;this.buf=[];this.frames=[];if(this.waiter)this.waiter();this.setOnline(false,tr('связь потеряна','connection lost'));upload(this);if(this.want)this.reconnect()})}
  get C(){return CHEM[this.chem]}
  save(){try{localStorage.setItem(this.key,JSON.stringify({chem:this.chem,cap:this.cap,long:this.long.slice(-MAXLONG),events:this.events.slice(0,200),upT:this.upT,upE:this.upE,sent:this.sent,sentAt:this.sentAt}))}catch(e){glog('история не сохраняется: '+e)}}
  event(level,text){this.events.unshift({t:stamp(),level,text});if(this.events.length>200)this.events.pop();if(level==2)alarm(this.name+': '+text)}
@@ -102,57 +102,80 @@ class Dev{
   const rx=cs.find(c=>c.uuid.startsWith('0000fff1'))||cs.find(c=>c.properties.notify);
   this.tx=cs.find(c=>c.uuid.startsWith('0000fff2'))||cs.find(c=>c.properties.writeWithoutResponse||c.properties.write);
   if(!rx||!this.tx)throw new Error(tr('нет нужных характеристик (удалите устройство в настройках Bluetooth телефона и добавьте заново)','required characteristics not found (remove the device in your phone\'s Bluetooth settings and add it again)'));
-  await rx.startNotifications();rx.addEventListener('characteristicvaluechanged',e=>this.onData(e));
-  this.buf=[];this.running=true;this.setOnline(true);lock();this.loop()}
- onData(ev){const v=new Uint8Array(ev.target.value.buffer);this.buf.push(...v);
+  if(this.rx&&this.rx!==rx)this.rx.removeEventListener('characteristicvaluechanged',this._onData);
+  rx.removeEventListener('characteristicvaluechanged',this._onData);rx.addEventListener('characteristicvaluechanged',this._onData);this.rx=rx;
+  await rx.startNotifications();await sleep(200);
+  this.buf=[];this.frames=[];this.running=true;this.setOnline(true);lock();this.loop()}
+ onData(ev){const dv=ev.target.value,v=new Uint8Array(dv.buffer,dv.byteOffset,dv.byteLength);this.buf.push(...v);
   while(this.buf.length>=13){const i=this.buf.indexOf(0xA5);if(i<0){this.buf=[];return}if(i>0)this.buf.splice(0,i);if(this.buf.length<13)return;
-   const f=this.buf.splice(0,13);if((f.slice(0,12).reduce((a,b)=>a+b)&255)!==f[12])continue;this.frames.push(f);if(this.waiter)this.waiter()}}
- ask(cmd,n=1,b0=0){const run=async()=>{this.frames=[];await this.tx.writeValueWithoutResponse(frame(cmd,b0));const end=Date.now()+1500;
-   for(;;){const got=this.frames.filter(f=>f[2]===cmd);if(got.length>=n||Date.now()>=end)return got;
-    await new Promise(r=>{const t=setTimeout(r,Math.max(50,end-Date.now()));this.waiter=()=>{clearTimeout(t);this.waiter=null;r()}})}};
-  const p=this.q.then(run,run);this.q=p.catch(()=>{});return p}
+   let sum=0;for(let k=0;k<12;k++)sum+=this.buf[k];if((sum&255)!==this.buf[12]){this.buf.splice(0,1);continue}
+   this.frames.push(this.buf.splice(0,13));if(this.waiter)this.waiter()}}
+ enqueue(fn){const p=this.q.then(fn,fn);this.q=p.catch(()=>{});return p}
+ async _ask(cmd,n=1,b0=0){if(!this.running||!this.tx)return[];this.frames=[];const pkt=frame(cmd,b0);
+  if(this.tx.properties.writeWithoutResponse&&this.tx.writeValueWithoutResponse){
+   try{await this.tx.writeValueWithoutResponse(pkt)}catch(e){if(this.tx.properties.write&&this.tx.writeValueWithResponse)await this.tx.writeValueWithResponse(pkt);else throw e}
+  }else await this.tx.writeValueWithResponse(pkt);
+  const end=Date.now()+1500;
+  for(;;){const got=this.frames.filter(f=>f[2]===cmd);if(got.length>=n||Date.now()>=end||!this.running)return got;
+   await new Promise(r=>{const done=()=>{clearTimeout(t);this.waiter=null;r()};const t=setTimeout(done,Math.max(50,end-Date.now()));this.waiter=done})}}
+ ask(cmd,n=1,b0=0){return this.enqueue(()=>this._ask(cmd,n,b0))}
  async cmd(c,b0,label){if(this.demo){toast(tr('В демо управление BMS недоступно','BMS control is unavailable in demo'));return}
   if(!this.running||!this.tx){toast(tr('Сначала подключитесь к BMS','Connect to BMS first'),'bad');return}
-  try{const f=await this.ask(c,1,b0);if(!f.length)throw new Error(tr('нет ответа','no response'));
-   this.event(1,label);glog(label);toast(label,'ok');if(c!==0x00)this.update(await this.poll())}
-  catch(e){toast(tr('Команда не выполнена: ','Command failed: ')+(e.message||e),'bad');glog(label+': '+(e.message||e))}}
- async poll(){const d={t:Date.now()/1000};let f=await this.ask(0x90);if(!f.length)throw new Error(tr('нет ответа','no response'));f=f[0];
+  return this.enqueue(async()=>{try{const f=await this._ask(c,1,b0);if(!f.length)throw new Error(tr('нет ответа','no response'));
+    this.event(1,label);glog(label);toast(label,'ok');if(c!==0x00)this.update(await this._poll())}
+   catch(e){toast(tr('Команда не выполнена: ','Command failed: ')+(e.message||e),'bad');glog(label+': '+(e.message||e))}})}
+ async _poll(){const d={t:Date.now()/1000};let f=await this._ask(0x90);if(!f.length)throw new Error(tr('нет ответа','no response'));f=f[0];
   d.V=u16(f,4)/10;d.I=(u16(f,8)-30000)/10;d.soc=u16(f,10)/10;
-  f=await this.ask(0x92);if(f.length){d.tmax=f[0][4]-40;d.tmin=f[0][6]-40}
-  f=await this.ask(0x93);if(f.length){f=f[0];d.state=f[4];d.chg=f[5];d.dis=f[6];d.cap=((f[8]<<24)|(f[9]<<16)|(f[10]<<8)|f[11])/1000}
-  f=await this.ask(0x94);if(f.length){f=f[0];d.n=f[4];d.charger=f[6];d.load=f[7];d.cycles=u16(f,9)}
-  const n=d.n||8,fr=(await this.ask(0x95,Math.ceil(n/3))).sort((a,b)=>a[4]-b[4]);let cells=[];fr.forEach(g=>{for(let k=0;k<3;k++)cells.push(u16(g,5+2*k))});d.cells=cells.slice(0,n);
-  f=await this.ask(0x97);d.bal=f.length?d.cells.map((_,i)=>(f[0][4+(i>>3)]>>(i&7))&1):[];
-  f=await this.ask(0x98);d.fault=f.length?f[0].slice(4,12):[];d.asleep=d.V===0&&!d.cells.some(x=>x);return d}
+  f=await this._ask(0x92);if(f.length){d.tmax=f[0][4]-40;d.tmin=f[0][6]-40}
+  f=await this._ask(0x93);if(f.length){f=f[0];d.state=f[4];d.chg=f[5];d.dis=f[6];d.cap=(((f[8]<<24)|(f[9]<<16)|(f[10]<<8)|f[11])>>>0)/1000}
+  f=await this._ask(0x94);if(f.length){f=f[0];d.n=f[4];d.charger=f[6];d.load=f[7];d.cycles=u16(f,9)}
+  const n=d.n||8,fr=await this._ask(0x95,Math.ceil(n/3)),byIdx=new Map();
+  fr.forEach(g=>{if(g[4]!==0xFF&&g[4]>0&&!byIdx.has(g[4]))byIdx.set(g[4],g)});
+  let cells=[];[...byIdx.entries()].sort((a,b)=>a[0]-b[0]).forEach(([,g])=>{for(let k=0;k<3;k++)cells.push(u16(g,5+2*k))});d.cells=cells.slice(0,n);
+  f=await this._ask(0x97);d.bal=d.cells.length&&f.length?d.cells.map((_,i)=>(f[0][4+(i>>3)]>>(i&7))&1):[];
+  f=await this._ask(0x98);d.fault=f.length?f[0].slice(4,12):(this.last?this.last.fault:[]);d.asleep=d.V===0&&(!d.cells.length||!d.cells.some(x=>x));return d}
+ poll(){return this.enqueue(()=>this._poll())}
  async loop(){while(this.running){const t0=Date.now();try{this.update(await this.poll())}catch(e){if(this.running)this.err=String(e.message||e)}await sleep(Math.max(100,PERIOD-(Date.now()-t0)))}}
 
  slope(t){const p=this.hist.filter(h=>h.t>=t-300&&h.sum);if(p.length<2||p[p.length-1].t-p[0].t<120)return null;return(p[p.length-1].sum-p[0].sum)*1000/((p[p.length-1].t-p[0].t)/60)}
  evaluate(d){const ck=[],C=this.C,add=(name,level,text)=>ck.push({name:LANG==='ru'?name:(NEN[name]||name),level,text});
   if(d.asleep){add('BMS отвечает',1,tr('BMS спит: модуль отвечает, данные нулевые','BMS is asleep: the module responds, data is zero'));return ck}
+  if(!d.cells.length){add('BMS отвечает',1,tr('нет данных по ячейкам','no cell data'));return ck}
   add('BMS отвечает',0,tr('данные получены','data received'));const cs=d.cells,mx=Math.max(...cs),mn=Math.min(...cs),sm=cs.reduce((a,b)=>a+b,0)/1000,sp=mx-mn;
+  const h3=this.hist.slice(-3),p30=this.hist.filter(h=>h.t>=d.t-30),atRest=p30.length>=10&&d.t-p30[0].t>=28&&p30.every(h=>Math.abs(h.I)<.5),underLoad=Math.abs(d.I)>10;
+  const mirrorIdx=c=>{if(c.length<2)return-1;const m=c.reduce((a,b)=>a+b,0)/c.length;for(let i=0;i<c.length-1;i++){const a=c[i]-m,b=c[i+1]-m;if(a*b<0&&Math.abs(a)>80&&Math.abs(b)>80&&Math.abs((c[i]+c[i+1])/2-m)<30)return i}return-1};
+  const mp=mirrorIdx(cs),dead=d.V>16?cs.map((v,i)=>v<=500?i+1:0).filter(Boolean):[];
+  if(dead.length)add('Обрыв отвода ячейки',2,tr(`яч. ${dead.join(', ')} ≤500 мВ при сборке ${d.V.toFixed(1)} В — обрыв балансирного провода или мёртвый канал`,`cell ${dead.join(', ')} ≤500 mV at ${d.V.toFixed(1)} V pack — open balance lead or dead AFE channel`));
+  if(mp>=0&&h3.length===3&&h3.every(h=>mirrorIdx(h.cells)===mp))add('Контакт балансира',2,tr(`зеркальный сдвиг яч. ${mp+1} и ${mp+2} (±>80 мВ при среднем <30 мВ) — плохой контакт отвода балансира`,`mirror swing on cells ${mp+1} & ${mp+2} (±>80 mV, pair avg <30 mV) — loose balance tap`));
   add('Сумма ячеек = сборка',Math.abs(sm-d.V)<=SUM_TOL?0:1,`${sm.toFixed(2)} ${uV} ${tr('против','vs')} ${d.V.toFixed(1)} ${uV}`);
   add('Ячейки в пределах',mx>=C.vmax||mn<=C.loBad?2:(mx>=C.hiWarn||mn<=C.loWarn?1:0),`${(mn/1000).toFixed(3)}…${(mx/1000).toFixed(3)} ${uV}`);
-  add('Перекос ячеек',sp>=SPREAD_BAD?2:sp>=SPREAD_WARN?1:0,tr(`${sp} мВ (макс яч. ${cs.indexOf(mx)+1}, мин яч. ${cs.indexOf(mn)+1})`,`${sp} mV (max cell ${cs.indexOf(mx)+1}, min cell ${cs.indexOf(mn)+1})`));
-  if(d.tmax!=null)add('Температура',d.tmax>=T_BAD||d.tmax<0?2:d.tmax>=T_WARN?1:0,`${d.tmin}…${d.tmax} °C`);
+  const spTag=atRest?tr(' (в покое ≥30 с)',' (at rest ≥30 s)'):(underLoad?tr(` (под нагрузкой ${d.I.toFixed(1)} А — возможен вклад R_вн)`,` (under ${d.I.toFixed(1)} A load — IR drop possible)`):'');
+  add('Перекос ячеек',sp>=SPREAD_BAD?2:sp>=SPREAD_WARN?1:0,tr(`${sp} мВ (макс яч. ${cs.indexOf(mx)+1}, мин яч. ${cs.indexOf(mn)+1})`,`${sp} mV (max cell ${cs.indexOf(mx)+1}, min cell ${cs.indexOf(mn)+1})`)+spTag);
+  if(d.tmax!=null)add('Температура',d.tmax>=T_BAD||d.tmin<0?2:d.tmax>=T_WARN?1:0,`${d.tmin}…${d.tmax} °C`);
   const fl=decodeFaults(d.fault),hard=fl.filter(x=>!SOFT.some(k=>x.startsWith(k)));
   add('Защиты BMS',hard.length?2:0,fl.length?fl.join('; ')+(hard.length?'':tr(' (SOC не откалиброван, не критично)',' (SOC not calibrated, not critical)')):tr('нет','none'));
-  const sl=this.slope(d.t);
-  if(d.charger&&!d.chg)add('Ключ заряда',2,tr('зарядное подключено, а ключ заряда ВЫКЛ','charger is connected but the charge switch is OFF'));else add('Ключ заряда',d.chg?0:1,d.chg?tr('вкл','on'):tr('выкл (зарядное не обнаружено)','off (no charger detected)'));
+  const sl=this.slope(d.t),stuckChg=h3.length===3&&h3.every(h=>h.chg===0&&h.I>1),stuckDis=h3.length===3&&h3.every(h=>h.dis===0&&h.I<-1);
+  if(stuckChg)add('Ключ заряда',2,tr(`ключ заряда ВЫКЛ, но ток заряда ${d.I.toFixed(1)} А — возможно пробит/залип ключ`,`charge switch is OFF, yet charge current is ${d.I.toFixed(1)} A — MOSFET may be shorted/stuck`));
+  else if(d.charger&&!d.chg)add('Ключ заряда',2,tr('зарядное подключено, а ключ заряда ВЫКЛ','charger is connected but the charge switch is OFF'));else add('Ключ заряда',d.chg?0:1,d.chg?tr('вкл','on'):tr('выкл (зарядное не обнаружено)','off (no charger detected)'));
+  if(stuckDis)add('Ключ разряда',2,tr(`ключ разряда ВЫКЛ, но ток разряда ${(-d.I).toFixed(1)} А — возможно пробит/залип ключ`,`discharge switch is OFF, yet discharge current is ${(-d.I).toFixed(1)} A — MOSFET may be shorted/stuck`));
   if(d.I>.3)add('Заряд идёт',0,tr(`ток ${d.I.toFixed(1)} А`,`current ${d.I.toFixed(1)} A`));
+  else if(!d.charger)add('Заряд идёт',0,d.I<-.3?tr(`разряд ${(-d.I).toFixed(1)} А`,`discharging ${(-d.I).toFixed(1)} A`):tr('покой (зарядное не подключено)','idle (no charger)'));
   else if(sl==null)add('Заряд идёт',0,tr('копится история (нужно 2 мин)','collecting history (needs 2 min)'));
   else if(sl>=RISE_MIN)add('Заряд идёт',0,tr(`сумма ячеек растёт +${sl.toFixed(1)} мВ/мин`,`cell sum rising +${sl.toFixed(1)} mV/min`));
   else if(mx>=C.top)add('Заряд идёт',0,tr('ячейки у верха, рост остановился (CV или конец)','cells are at the top, rise has stopped (CV or finished)'));
   else add('Заряд идёт',1,tr(`нет роста напряжения за 5 мин (${sl.toFixed(1)} мВ/мин): заряд не идёт или завершён`,`no voltage rise in 5 min (${sl.toFixed(1)} mV/min): not charging or finished`));
+  const p120=this.hist.filter(h=>h.t>=d.t-120),dvPack=(p120.length>=30&&d.t-p120[0].t>=115&&p120.every(h=>h.I===0))?Math.abs(d.sum-p120[0].sum)*1000:0;
+  if(dvPack>80)add('Малый ток (мёртвая зона)',1,tr(`ток 0 А ≥2 мин, но напряжение сборки изменилось на ${dvPack.toFixed(0)} мВ — возможен скрытый ток ниже порога датчика`,`current 0 A for ≥2 min, yet pack voltage shifted by ${dvPack.toFixed(0)} mV — hidden current below shunt deadband`));
   add('Обрыв заряда',Date.now()<this.badUntil?2:0,Date.now()<this.badUntil?tr('недавно напряжение упало: заряд оборвался (см. события)','voltage dropped recently: charging was interrupted (see events)'):tr('не было','none'));
   if(d.I>.3){const cr=d.I/this.cap;add('Ток заряда',d.I>60?2:cr>.5?1:0,tr(`${d.I.toFixed(1)} А = ${cr.toFixed(2)}C (норма 0,1–0,3C = ${(.1*this.cap).toFixed(0)}–${(.3*this.cap).toFixed(0)} А)`,`${d.I.toFixed(1)} A = ${cr.toFixed(2)}C (normal 0.1–0.3C = ${(.1*this.cap).toFixed(0)}–${(.3*this.cap).toFixed(0)} A)`))}
   if(mx>=C.top)add('Балансировка у верха',sp<=TOP_SPREAD?0:1,tr(`перекос ${sp} мВ, цель ≤${TOP_SPREAD}; балансир ${d.bal.some(x=>x)?'работает':'не включён'}`,`spread ${sp} mV, target ≤${TOP_SPREAD}; balancer ${d.bal.some(x=>x)?'active':'off'}`));
   return ck}
  detect(d){const p=this.prev;if(p&&!d.asleep&&!p.asleep){[['chg',tr('ключ заряда','charge switch')],['dis',tr('ключ разряда','discharge switch')],['charger',tr('зарядное','charger')]].forEach(([k,nm])=>{if(d[k]!==p[k]&&d[k]!=null)this.event(k!=='chg'||d[k]?1:2,`${nm}: ${d[k]?tr('вкл','on'):tr('выкл','off')}`)});
    if(String(d.fault)!==String(p.fault)){const fl=decodeFaults(d.fault);this.event(fl.some(x=>!SOFT.some(k=>x.startsWith(k)))?2:1,tr('защиты: ','protections: ')+(fl.join('; ')||tr('сняты','cleared')))}
-   const old=this.hist.find(h=>h.sum&&h.t>=d.t-70&&h.t<=d.t-50),sm=d.cells.reduce((a,b)=>a+b,0)/1000;
-   if(old&&old.sum-sm>=DROP_V&&(p.chg||d.I>.3||p.I>.3)){this.event(2,tr(`заряд оборвался: сумма ячеек упала на ${(old.sum-sm).toFixed(2)} В за минуту`,`charging interrupted: cell sum dropped by ${(old.sum-sm).toFixed(2)} V in a minute`));this.badUntil=Date.now()+600000}}
+   const old=this.hist.find(h=>h.sum&&h.t>=d.t-70&&h.t<=d.t-50),sm=d.cells.length?d.cells.reduce((a,b)=>a+b,0)/1000:0;
+   if(d.cells.length&&old&&old.sum-sm>=DROP_V&&(p.chg||d.I>.3||p.I>.3)){this.event(2,tr(`заряд оборвался: сумма ячеек упала на ${(old.sum-sm).toFixed(2)} В за минуту`,`charging interrupted: cell sum dropped by ${(old.sum-sm).toFixed(2)} V in a minute`));this.badUntil=Date.now()+600000}}
   if(p&&d.asleep!==p.asleep)this.event(1,d.asleep?tr('BMS уснула','BMS fell asleep'):tr('BMS проснулась','BMS woke up'))}
- update(d){d.sum=d.cells.reduce((a,b)=>a+b,0)/1000;
+ update(d){d.sum=d.cells.length?d.cells.reduce((a,b)=>a+b,0)/1000:0;
   if(this.prev&&!d.asleep){const dt=Math.min(d.t-this.prev.t,10);if(d.I>0)this.ahIn+=d.I*dt/3600;else this.ahOut+=-d.I*dt/3600}
   this.detect(d);this.hist.push(d);if(this.hist.length>1800)this.hist.shift();
   this.checks=this.evaluate(d);this.level=Math.max(...this.checks.map(c=>c.level));

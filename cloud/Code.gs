@@ -33,9 +33,12 @@ function num_(x, lo, hi) {
 
 function verdict_(s) {
   var vmax = s.chem === 'nmc' ? 4200 : 3650, lo = s.chem === 'nmc' ? 2800 : 2500, out = [];
+  if (s.minCell <= 500 && s.maxCell >= 2000) out.push('обрыв отвода / мёртвая ячейка');
   if (s.maxCell >= vmax) out.push('перенапряжение ячейки');
   if (s.minCell <= lo) out.push('глубокий разряд ячейки');
   if (s.spread >= 300) out.push('сильный перекос'); else if (s.spread >= 150) out.push('перекос');
+  if (s.topImbal > 60 && s.spread < 150) out.push('разбаланс у верха в покое: ' + s.topImbal + ' мВ');
+  if (s.flt) out.push('ошибка BMS (0x' + s.flt + ')');
   if (s.alarms > 0) out.push('были тревоги: ' + s.alarms);
   return out.length ? out.join('; ') : 'норма';
 }
@@ -81,7 +84,7 @@ function doPost(e) {
     });
     good.sort(function (x, y) { return x.t - y.t; });
 
-    var n = good.length, maxCell = 0, minCell = 99999, sumI = 0, maxI = -999, last = null;
+    var n = good.length, maxCell = 0, minCell = 99999, sumI = 0, maxI = -999, last = null, topV = chem === 'nmc' ? 4100 : 3450, topImbal = 0, fltHex = '';
     if (n) {
       var hdr = ['server_time', 'session', 'time', 'I_A', 'cells'];
       for (i = 1; i <= 16; i++) hdr.push('c' + i);
@@ -90,12 +93,15 @@ function doPost(e) {
       var sh = sheet_('samples', hdr), w = hdr.length;
       if (sh.getLastColumn() < w) sh.getRange(1, 1, 1, w).setValues([hdr]);
       var outRows = good.map(function (g) {
-        maxCell = Math.max(maxCell, Math.max.apply(null, g.cells));
-        minCell = Math.min(minCell, Math.min.apply(null, g.cells));
+        var cMax = Math.max.apply(null, g.cells), cMin = Math.min.apply(null, g.cells);
+        maxCell = Math.max(maxCell, cMax);
+        minCell = Math.min(minCell, cMin);
+        if (Math.abs(g.I) < 0.5 && cMax >= topV) topImbal = Math.max(topImbal, cMax - cMin);
         sumI += g.I; maxI = Math.max(maxI, g.I); last = g;
         var r = [now, b.sid, new Date(g.t * 1000), g.I, g.cells.length].concat(g.cells);
         while (r.length < 5 + 16) r.push('');
         var m = g.x || {}, bv = function (v, lo, hi) { var z = num_(v, lo, hi); return z === null ? '' : z; };
+        if (m.flt && !/^0*$/.test(String(m.flt))) fltHex = String(m.flt);
         r.push(
           bv(m.V, 0, 200), bv(m.soc, 0, 100), bv(m.tmin, -60, 150), bv(m.tmax, -60, 150),
           bv(m.st, 0, 10), bv(m.chg, 0, 1), bv(m.dis, 0, 1), bv(m.chgr, 0, 1), bv(m.load, 0, 1),
@@ -131,6 +137,7 @@ function doPost(e) {
     s.rows += n; s.sumI += sumI; s.maxI = Math.max(s.maxI, maxI); s.alarms += alarms; s.chem = chem;
     if (n) { s.maxCell = Math.max(s.maxCell, maxCell); s.minCell = Math.min(s.minCell, minCell); }
     s.spread = last ? Math.max.apply(null, last.cells) - Math.min.apply(null, last.cells) : (row ? Number(row[12]) || 0 : 0);
+    s.topImbal = topImbal; s.flt = fltHex;
     var rec = [b.sid, s.first, now, s.rows, chem, cap === null ? '' : cap, cycles === null ? (row ? row[6] : '') : cycles,
       last ? last.cells.length : (row ? row[7] : ''), s.rows ? Math.round(s.sumI / s.rows * 10) / 10 : 0, s.maxI === -999 ? '' : s.maxI,
       s.maxCell, s.minCell === 99999 ? '' : s.minCell, s.spread, last ? new Date(last.t * 1000) : (row ? row[13] : ''), s.alarms, verdict_(s)];
