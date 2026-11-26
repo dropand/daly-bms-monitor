@@ -67,10 +67,10 @@ function doPost(e) {
     var cap = num_(b.cap, 1, 2000), cycles = num_(b.cycles, 0, 100000);
 
     var ss = sheet_('sessions', ['session', 'first_seen', 'updated', 'rows', 'chem', 'cap_Ah', 'cycles', 'cells', 'I_mean_A',
-      'I_max_A', 'max_cell_mV', 'min_cell_mV', 'spread_last_mV', 'last_data', 'alarms', 'verdict', 'lim_mV', 'ir_mOhm']);
-    if (ss.getLastColumn() < 18) ss.getRange(1, 17, 1, 2).setValues([['lim_mV', 'ir_mOhm']]);
+      'I_max_A', 'max_cell_mV', 'min_cell_mV', 'spread_last_mV', 'last_data', 'alarms', 'verdict', 'lim_mV', 'ir_mOhm', 'bms_sn']);
+    if (ss.getLastColumn() < 19) ss.getRange(1, 17, 1, 3).setValues([['lim_mV', 'ir_mOhm', 'bms_sn']]);
     var ids = ss.getLastRow() > 1 ? ss.getRange(2, 1, ss.getLastRow() - 1, 1).getValues().map(function (r) { return r[0]; }) : [];
-    var idx = ids.indexOf(b.sid), row = idx >= 0 ? ss.getRange(idx + 2, 1, 1, 18).getValues()[0] : null;
+    var idx = ids.indexOf(b.sid), row = idx >= 0 ? ss.getRange(idx + 2, 1, 1, 19).getValues()[0] : null;
     var water = row && row[13] instanceof Date ? row[13].getTime() / 1000 : 0;
 
     var good = [], seen = {}, i, xArr = Array.isArray(b.x) ? b.x : [];
@@ -151,10 +151,11 @@ function doPost(e) {
         if (badIr.length) s.irBad = badIr.join(', ');
       }
     }
+    var snStr = (b.sn || b.rcap) ? [b.rcap ? b.rcap + ' Ah' : '', b.sn || ''].filter(Boolean).join(' ') : (row ? row[18] : '');
     var rec = [b.sid, s.first, now, s.rows, chem, cap === null ? '' : cap, cycles === null ? (row ? row[6] : '') : cycles,
       last ? last.cells.length : (row ? row[7] : ''), s.rows ? Math.round(s.sumI / s.rows * 10) / 10 : 0, s.maxI === -999 ? '' : s.maxI,
-      s.maxCell, s.minCell === 99999 ? '' : s.minCell, s.spread, last ? new Date(last.t * 1000) : (row ? row[13] : ''), s.alarms, verdict_(s), safe_(limStr, 32), safe_(irStr, 120)];
-    if (idx >= 0) ss.getRange(idx + 2, 1, 1, 18).setValues([rec]); else ss.appendRow(rec);
+      s.maxCell, s.minCell === 99999 ? '' : s.minCell, s.spread, last ? new Date(last.t * 1000) : (row ? row[13] : ''), s.alarms, verdict_(s), safe_(limStr, 32), safe_(irStr, 120), safe_(snStr, 64)];
+    if (idx >= 0) ss.getRange(idx + 2, 1, 1, 19).setValues([rec]); else ss.appendRow(rec);
     return out_('ok');
   } catch (err) {
     return out_('bad');

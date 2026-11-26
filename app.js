@@ -67,7 +67,7 @@ async function upload(dv,manual){
  if(wait>0){if(manual)toast(tr(`Слишком часто: подождите ${Math.ceil(wait/1000)} с`,`Too often: wait ${Math.ceil(wait/1000)} s`),'bad');return}
  const p=pending(dv);if(!p.rows&&!p.evs){if(manual)toast(tr('Всё уже отправлено, новых данных нет','Everything is already uploaded'),'ok');return}
  const rows=dv.long.filter(x=>x[0]>dv.upT).slice(0,500),evs=dv.events.filter(e=>e.t>dv.upE).reverse().slice(0,100);
- const body=JSON.stringify({v:1,sid:anon+'-'+hash6(dv.id),chem:dv.chem,cap:dv.cap,cycles:dv.last&&dv.last.cycles,lim:dv.lim,ir:dv.ir,rows:rows.map(x=>[x[0],x[1],...x[2]]),x:rows.map(x=>{const m=x[4]||{},b=(x[3]||[]).map((v,i)=>v?i+1:0).filter(Boolean).join(',');return{V:m.V,soc:m.soc,tmin:m.tmin,tmax:m.tmax,st:m.st,chg:m.chg,dis:m.dis,chgr:m.chgr,load:m.load,cap:m.cap,bal:b,flt:m.flt||''}}),events:evs.map(e=>[e.t,e.level,e.text])});
+ const body=JSON.stringify({v:1,sid:anon+'-'+hash6(dv.id),chem:dv.chem,cap:dv.cap,cycles:dv.last&&dv.last.cycles,lim:dv.lim,ir:dv.ir,sn:dv.sn,rcap:dv.rcap,rows:rows.map(x=>[x[0],x[1],...x[2]]),x:rows.map(x=>{const m=x[4]||{},b=(x[3]||[]).map((v,i)=>v?i+1:0).filter(Boolean).join(',');return{V:m.V,soc:m.soc,tmin:m.tmin,tmax:m.tmax,st:m.st,chg:m.chg,dis:m.dis,chgr:m.chgr,load:m.load,cap:m.cap,bal:b,flt:m.flt||''}}),events:evs.map(e=>[e.t,e.level,e.text])});
  dv.sending=true;dv.lastTry=Date.now();let confirmed=false;
  try{try{const r=await fetch(cloudUrl(),{method:'POST',headers:{'Content-Type':'text/plain'},body,referrerPolicy:'no-referrer',credentials:'omit'}),t=(await r.text()).trim();
     if(t!=='ok')throw new Error(t.slice(0,80)||tr('пустой ответ','empty response'));confirmed=true}
@@ -83,7 +83,7 @@ class Dev{
  constructor(device){this.dev=device;this.id=device.id;this.name=device.name||device.id;this.key='daly2:'+device.id;
   this.buf=[];this.frames=[];this.waiter=null;this.rx=null;this._onData=e=>this.onData(e);this.q=Promise.resolve();this.hist=[];this.long=[];this.events=[];this.chem='lfp';this.cap=105;
   this.last=null;this.prev=null;this.online=false;this.err=tr('подключение…','connecting…');this.want=true;this.running=false;this.badUntil=0;
-  this.ahIn=0;this.ahOut=0;this.t0=Date.now();this.longT=0;this.checks=[];this.level=3;this.lim=null;this.ir=null;this.limDone=false;this.proto=null;
+  this.ahIn=0;this.ahOut=0;this.t0=Date.now();this.longT=0;this.checks=[];this.level=3;this.lim=null;this.ir=null;this.sn='';this.rcap=null;this.limDone=false;this.proto=null;
   this.upT=0;this.upE='';this.sent=0;this.sentAt=0;this.sentOk=null;this.lastTry=0;this.sending=false;
   try{const s=JSON.parse(localStorage.getItem(this.key)||'{}');if(CHEM[s.chem])this.chem=s.chem;if(Number.isFinite(s.cap))this.cap=Math.min(2000,Math.max(1,s.cap));
    const num=x=>typeof x==='number'&&Number.isFinite(x);
@@ -182,14 +182,19 @@ class Dev{
   f=await this._ask(0x98);d.fault=f.length?f[0].slice(4,12):(this.last?this.last.fault:[]);d.asleep=d.V===0&&(!d.cells.length||!d.cells.some(x=>x));
   if(!this.limDone&&!d.asleep){this.limDone=true;const l=await this._ask(0x59,1,0xAA,0xAA,500);
    if(l.length){const ov1=u16(l[0],4),ov2=u16(l[0],6),uv1=u16(l[0],8),uv2=u16(l[0],10);
-    if(uv2>=2000&&uv2<=uv1&&uv1<ov1&&ov1<=ov2&&ov2<=4500){this.lim={ov1,ov2,uv1,uv2};glog(tr(`пороги BMS: ${uv2}–${ov2} мВ`,`BMS limits: ${uv2}–${ov2} mV`))}}}
+    if(uv2>=2000&&uv2<=uv1&&uv1<ov1&&ov1<=ov2&&ov2<=4500){this.lim={ov1,ov2,uv1,uv2};glog(tr(`пороги BMS: ${uv2}–${ov2} мВ`,`BMS limits: ${uv2}–${ov2} mV`))}}
+   const p0=await this._ask(0x50,1,0xAA,0xAA,500);
+   if(p0.length){const rc=(((p0[0][4]<<24)|(p0[0][5]<<16)|(p0[0][6]<<8)|p0[0][7])>>>0)/1000;if(rc>=1&&rc<=2000){this.rcap=Math.round(rc*10)/10;glog(tr(`паспорт BMS: ${this.rcap} А·ч`,`BMS rated cap: ${this.rcap} Ah`))}}
+   const s57=await this._ask(0x57,5,0xAA,0xAA,500);
+   if(s57.length){const sn=s57.sort((a,b)=>a[4]-b[4]).map(f=>f.slice(5,12).filter(c=>c>=32&&c<=126).map(c=>String.fromCharCode(c)).join('')).join('').trim();
+    if(sn){this.sn=sn;glog(tr('код BMS: ','BMS code: ')+sn)}}}
   return d}
  poll(){return this.enqueue(()=>this._poll())}
  async loop(){while(this.running){const t0=Date.now();try{this.update(await this.poll())}catch(e){if(this.running)this.err=String(e.message||e)}await sleep(Math.max(100,PERIOD-(Date.now()-t0)))}}
 
  slope(t){const p=this.hist.filter(h=>h.t>=t-300&&h.sum);if(p.length<2||p[p.length-1].t-p[0].t<120)return null;return(p[p.length-1].sum-p[0].sum)*1000/((p[p.length-1].t-p[0].t)/60)}
  evaluate(d){const ck=[],C=this.C,add=(name,level,text)=>ck.push({name:LANG==='ru'?name:(NEN[name]||name),level,text});
-  if(d.asleep){add('BMS отвечает',1,tr('BMS спит: модуль отвечает, данные нулевые','BMS is asleep: the module responds, data is zero'));return ck}
+  if(d.asleep){add('BMS отвечает',1,tr('BMS спит: подключите зарядку на 2 с или нажмите кнопку пробуждения на BMS','BMS is asleep: connect charger for 2 s or press the BMS wake button'));return ck}
   if(!d.cells.length){add('BMS отвечает',1,tr('нет данных по ячейкам','no cell data'));return ck}
   add('BMS отвечает',0,tr('данные получены','data received'));const cs=d.cells,mx=Math.max(...cs),mn=Math.min(...cs),sm=cs.reduce((a,b)=>a+b,0)/1000,sp=mx-mn;
   const h3=this.hist.slice(-3),p30=this.hist.filter(h=>h.t>=d.t-30),atRest=p30.length>=10&&d.t-p30[0].t>=28&&p30.every(h=>Math.abs(h.I)<.5),underLoad=Math.abs(d.I)>10;
@@ -299,7 +304,7 @@ function mk(dv){const el=$('tpl').content.firstElementChild.cloneNode(true);$('r
 function upd(dv){const P=panels.get(dv.id)||mk(dv),q=P.q,d=dv.last,I=dv.metrics(),lv=!dv.online?2:(dv.last?dv.level:3);
  q('.ban').className='ban l'+lv;q('.nm').textContent=dv.name;q('.st').textContent=!dv.last&&dv.online?tr('ЖДУ ДАННЫЕ','WAITING FOR DATA'):L[lv==3?1:lv];
  q('.pc').textContent=I?I.soc:'–';q('.g1').setAttribute('stroke-dasharray',(I?I.soc:0)+' 100');
- q('.eta').textContent=!dv.online?(tr('Нет связи','No connection')+(dv.err?': '+dv.err:'')):(I&&I.eta!=null?`${tr('До конца заряда','Time to full')} ≈ ${fh(I.eta)} (${tr('к','by')} ${new Date(Date.now()+I.eta*60000).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}) · ${I.phase}`:(I?I.phase:''));
+ q('.eta').textContent=!dv.online?(tr('Нет связи','No connection')+(dv.err?': '+dv.err:'')+tr(' — закройте Smart BMS, поднесите телефон ближе или подключите зарядку на 2 с',' — close Smart BMS app, move closer, or connect charger for 2 s')):(I&&I.eta!=null?`${tr('До конца заряда','Time to full')} ≈ ${fh(I.eta)} (${tr('к','by')} ${new Date(Date.now()+I.eta*60000).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}) · ${I.phase}`:(I?I.phase:''));
  q('.kp').innerHTML=d?`<div><b>${d.V.toFixed(1)} ${uV}</b>${tr('сборка','pack')}</div><div><b>${d.I.toFixed(1)} ${uA}</b>${tr('ток','current')}</div><div><b>${d.tmax??'—'} °C</b>${tr('температура','temperature')}</div>`:'';
  q('.cloud').textContent=cloudLine(dv);
  q('.bchg').textContent=tr('Ключ заряда','Charge switch')+(d&&d.chg!=null?': '+(d.chg?tr('ВКЛ','ON'):tr('ВЫКЛ','OFF')):'');
@@ -310,7 +315,8 @@ function upd(dv){const P=panels.get(dv.id)||mk(dv),q=P.q,d=dv.last,I=dv.metrics(
   q('.bats').innerHTML=cs.map((v,i)=>`<div class="b1 ${v===mx&&mx!==mn?'mx':v===mn&&mx!==mn?'mn':''}"><div class="tube"><i style="height:${pos(v)}%"></i><u style="bottom:${pos(m)}%"></u></div><b>${(v/1000).toFixed(3)}</b><span>${i+1}${d.bal&&d.bal[i]?' <em class="bal">⚖</em>':''}</span></div>`).join('')}
  q('.res').innerHTML=I?`<div><b>${I.cycles??'—'}</b>${tr('циклов (типовой ресурс ~3000)','cycles (typical life ~3000)')}<div class="rb"><i style="width:${Math.min(100,(I.cycles||0)/3000*100)}%"></i></div></div><div><b>${I.ahIn.toFixed(2)}</b>${tr('принято А·ч','charged, Ah')}</div><div><b>${I.ahOut.toFixed(2)}</b>${tr('отдано А·ч','discharged, Ah')}</div><div><b>${I.capBms??'—'}</b>${tr('остаток по BMS, А·ч','remaining per BMS, Ah')}</div>`
   +(dv.ir?`<div><b>${dv.ir.map(r=>r??'—').join(' / ')}</b>${tr('R_вн ячеек, мОм','cell IR, mΩ')}</div>`:'')
-  +(dv.lim?`<div><b>${dv.lim.uv2}–${dv.lim.ov2}</b>${tr('пороги BMS, мВ','BMS limits, mV')}</div>`:''):'';
+  +(dv.lim?`<div><b>${dv.lim.uv2}–${dv.lim.ov2}</b>${tr('пороги BMS, мВ','BMS limits, mV')}</div>`:'')
+  +(dv.rcap||dv.sn?`<div><b>${[dv.rcap?dv.rcap+' А·ч':'',dv.sn].filter(Boolean).join(' · ')}</b>${tr('паспорт BMS','BMS info')}</div>`:''):'';
  q('.evl').innerHTML=dv.events.slice(0,15).map(e=>`<div class="e${e.level}">${esc(e.t.slice(5))}  ${esc(e.text)}</div>`).join('')||tr('пока нет','none yet');
  charts(dv,I,P)}
 function charts(dv,I,P){const q=P.q,lg=dv.long;if(!I||lg.length<2)return;const C=dv.C,t0=lg[0][0],sum=p=>p[2].reduce((a,v)=>a+v,0)/1000,
