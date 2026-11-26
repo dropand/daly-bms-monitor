@@ -2,13 +2,14 @@
 @media(prefers-color-scheme:dark){:root{--bg:#121414;--fg:#e9ebec;--card:#1c1f20;--mut:#9aa1a5;--ok:#66bb6a;--warn:#ffb74d;--bad:#ef5350;--acc:#64b5f6;--acc2:#ce93d8;--bd:#34393b}}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.4 system-ui,sans-serif;padding:12px;padding-top:max(12px,env(safe-area-inset-top));max-width:720px;margin:auto}
-h1{font-size:18px;margin:0 0 10px;display:flex;justify-content:space-between;align-items:baseline}
+h1{font-size:18px;margin:0 0 12px;display:flex;justify-content:space-between;align-items:center;gap:8px}
 h2{font-size:12px;margin:0 0 6px;color:var(--mut);font-weight:600;letter-spacing:.03em;text-transform:uppercase}
-.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:10px 12px;margin-bottom:10px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:12px 14px;margin-bottom:10px}
 section{margin-bottom:26px}
 button,select,input{font:inherit;color:var(--fg)}
-button{padding:9px 14px;border-radius:10px;border:1px solid var(--bd);background:var(--card);cursor:pointer}
-button.p{background:var(--acc);color:#fff;border-color:var(--acc);font-weight:600}
+button{padding:9px 14px;border-radius:10px;border:1px solid var(--bd);background:var(--card);cursor:pointer;transition:opacity .15s,transform .08s}
+button:hover{opacity:.9}button:active{transform:scale(.98)}
+button.p{background:var(--acc);color:#fff;border-color:var(--acc);font-weight:600;box-shadow:0 4px 14px rgba(21,101,192,.25)}
 select,input{padding:7px 8px;border-radius:8px;border:1px solid var(--bd);background:var(--card)}
 input[type=number]{width:84px}
 .ban{display:flex;align-items:center;gap:14px;border-radius:14px;padding:12px 14px;margin-bottom:10px;color:#fff;flex-wrap:wrap}
@@ -40,7 +41,15 @@ canvas{width:100%;display:block}.cV{height:190px}.cI{height:110px}.heat{height:1
 details summary{cursor:pointer;color:var(--mut);font-size:13px}.ev{font:11px ui-monospace,monospace;max-height:150px;overflow:auto;margin-top:6px}
 .e1{color:var(--warn)}.e2{color:var(--bad);font-weight:700}.note{color:var(--mut);font-size:12px}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:6px}
-#hero{text-align:center;padding:26px 12px}#hero h2{font-size:15px;color:var(--fg);text-transform:none;letter-spacing:0}
+#hero{text-align:center;padding:34px 20px 24px;background:linear-gradient(180deg,rgba(21,101,192,.07),transparent 55%),var(--card)}
+#hero>h2{font-size:21px;font-weight:700;color:var(--fg);text-transform:none;letter-spacing:-.01em;justify-content:center;cursor:default;margin-bottom:8px}
+#hero>h2::after{display:none}
+#hero>.note{font-size:14px;max-width:420px;margin:0 auto 18px;line-height:1.5}
+#hero .row{justify-content:center;gap:10px}
+#hero .more{text-align:center;margin-top:22px;padding-top:14px;border-top:1px solid var(--bd)}
+#hero .more summary{list-style:none;display:inline-block}
+#hero .more .row{margin-top:10px}
+button.big{font-size:16px;padding:13px 26px;border-radius:12px}
 label input[type=checkbox]{width:auto;margin-right:6px;vertical-align:middle}
 
 .card>h2{cursor:pointer;display:flex;justify-content:space-between;align-items:center;margin:0}
@@ -65,4 +74,4 @@ label input[type=checkbox]{width:auto;margin-right:6px;vertical-align:middle}
  button{padding:7px 10px;font-size:13px}
 }
 
-#hero{text-align:center}#hero .more{text-align:left;margin-top:12px}button.big{font-size:17px;padding:14px 28px}
+}
