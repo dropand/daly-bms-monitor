@@ -7,7 +7,7 @@ const col=k=>getComputedStyle(document.documentElement).getPropertyValue(k).trim
 const esc=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const u16=(f,i)=>(f[i]<<8)|f[i+1];
-const frame=cmd=>{const f=[0xA5,0x40,cmd,8,0,0,0,0,0,0,0,0];f.push(f.reduce((a,b)=>a+b)&255);return new Uint8Array(f)};
+const frame=(cmd,b0=0)=>{const f=[0xA5,0x40,cmd,8,b0,0,0,0,0,0,0,0];f.push(f.reduce((a,b)=>a+b)&255);return new Uint8Array(f)};
 const fh=m=>m==null?'—':(m>=60?Math.floor(m/60)+tr(' ч ',' h ')+String(m%60).padStart(2,'0')+tr(' мин',' min'):m+tr(' мин',' min'));
 const stamp=()=>{const d=new Date(),p=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`};
 const SVC=0xfff0,PERIOD=2000,LONG_STEP=30,MAXLONG=5760;
@@ -79,7 +79,7 @@ const uploadAll=m=>devs.forEach(d=>upload(d,m));
 // ---------- BMS ----------
 class Dev{
  constructor(device){this.dev=device;this.id=device.id;this.name=device.name||device.id;this.key='daly2:'+device.id;
-  this.buf=[];this.frames=[];this.waiter=null;this.hist=[];this.long=[];this.events=[];this.chem='lfp';this.cap=105;
+  this.buf=[];this.frames=[];this.waiter=null;this.q=Promise.resolve();this.hist=[];this.long=[];this.events=[];this.chem='lfp';this.cap=105;
   this.last=null;this.prev=null;this.online=false;this.err=tr('подключение…','connecting…');this.want=true;this.running=false;this.badUntil=0;
   this.ahIn=0;this.ahOut=0;this.t0=Date.now();this.longT=0;this.checks=[];this.level=3;
   this.upT=0;this.upE='';this.sent=0;this.sentAt=0;this.sentOk=null;this.lastTry=0;this.sending=false;
@@ -107,9 +107,15 @@ class Dev{
  onData(ev){const v=new Uint8Array(ev.target.value.buffer);this.buf.push(...v);
   while(this.buf.length>=13){const i=this.buf.indexOf(0xA5);if(i<0){this.buf=[];return}if(i>0)this.buf.splice(0,i);if(this.buf.length<13)return;
    const f=this.buf.splice(0,13);if((f.slice(0,12).reduce((a,b)=>a+b)&255)!==f[12])continue;this.frames.push(f);if(this.waiter)this.waiter()}}
- async ask(cmd,n=1){this.frames=[];await this.tx.writeValueWithoutResponse(frame(cmd));const end=Date.now()+1500;
-  for(;;){const got=this.frames.filter(f=>f[2]===cmd);if(got.length>=n||Date.now()>=end)return got;
-   await new Promise(r=>{const t=setTimeout(r,Math.max(50,end-Date.now()));this.waiter=()=>{clearTimeout(t);this.waiter=null;r()}})}}
+ ask(cmd,n=1,b0=0){const run=async()=>{this.frames=[];await this.tx.writeValueWithoutResponse(frame(cmd,b0));const end=Date.now()+1500;
+   for(;;){const got=this.frames.filter(f=>f[2]===cmd);if(got.length>=n||Date.now()>=end)return got;
+    await new Promise(r=>{const t=setTimeout(r,Math.max(50,end-Date.now()));this.waiter=()=>{clearTimeout(t);this.waiter=null;r()}})}};
+  const p=this.q.then(run,run);this.q=p.catch(()=>{});return p}
+ async cmd(c,b0,label){if(this.demo){toast(tr('В демо управление BMS недоступно','BMS control is unavailable in demo'));return}
+  if(!this.running||!this.tx){toast(tr('Сначала подключитесь к BMS','Connect to BMS first'),'bad');return}
+  try{const f=await this.ask(c,1,b0);if(!f.length)throw new Error(tr('нет ответа','no response'));
+   this.event(1,label);glog(label);toast(label,'ok');if(c!==0x00)this.update(await this.poll())}
+  catch(e){toast(tr('Команда не выполнена: ','Command failed: ')+(e.message||e),'bad');glog(label+': '+(e.message||e))}}
  async poll(){const d={t:Date.now()/1000};let f=await this.ask(0x90);if(!f.length)throw new Error(tr('нет ответа','no response'));f=f[0];
   d.V=u16(f,4)/10;d.I=(u16(f,8)-30000)/10;d.soc=u16(f,10)/10;
   f=await this.ask(0x92);if(f.length){d.tmax=f[0][4]-40;d.tmin=f[0][6]-40}
@@ -193,6 +199,9 @@ function mk(dv){const el=$('tpl').content.firstElementChild.cloneNode(true);$('r
  q('.bcloud').onclick=()=>upload(dv,true);
  q('.bdis').onclick=()=>{dv.want=false;dv.running=false;try{dv.dev.gatt.disconnect()}catch(e){}};
  q('.bclr').onclick=()=>{if(confirm(tr('Стереть историю и события этой BMS?','Erase the history and events of this BMS?'))){dv.long=[];dv.events=[];dv.ahIn=dv.ahOut=0;dv.t0=Date.now();dv.save()}};
+ q('.bchg').onclick=()=>{const on=!(dv.last&&dv.last.chg);if(confirm(on?tr('Включить (открыть) ключ заряда на BMS?','Turn ON (enable) the charge switch on BMS?'):tr('Выключить (закрыть) ключ заряда? Зарядка прекратится.','Turn OFF (disable) the charge switch? Charging will stop.')))dv.cmd(0xDA,on?1:0,tr('команда: ключ заряда ','command: charge switch ')+(on?tr('вкл','on'):tr('выкл','off')))};
+ q('.bdisw').onclick=()=>{const on=!(dv.last&&dv.last.dis);if(confirm(on?tr('Включить (открыть) ключ разряда на BMS?','Turn ON (enable) the discharge switch on BMS?'):tr('Выключить (закрыть) ключ разряда? Нагрузка будет обесточена.','Turn OFF (disable) the discharge switch? Load will be disconnected.')))dv.cmd(0xD9,on?1:0,tr('команда: ключ разряда ','command: discharge switch ')+(on?tr('вкл','on'):tr('выкл','off')))};
+ q('.brst').onclick=()=>{if(confirm(tr('Перезагрузить (сбросить) BMS? Связь кратковременно прервётся.','Reboot (reset) the BMS? Connection will briefly drop.')))dv.cmd(0x00,0,tr('команда: сброс BMS','command: BMS reset'))};
  const file=()=>new File([dv.csv()],`daly_${dv.name}_${new Date().toISOString().slice(0,16).replace(/[:T]/g,'-')}.csv`,{type:'text/csv'});
  q('.bcsv').onclick=()=>{const f=file(),a=document.createElement('a');a.href=URL.createObjectURL(f);a.download=f.name;a.click()};
  q('.bshare').onclick=async()=>{const f=file();try{if(navigator.canShare&&navigator.canShare({files:[f]}))await navigator.share({files:[f],title:'Daly BMS'});else q('.bcsv').click()}catch(e){}};
@@ -207,6 +216,8 @@ function upd(dv){const P=panels.get(dv.id)||mk(dv),q=P.q,d=dv.last,I=dv.metrics(
  q('.eta').textContent=!dv.online?(tr('Нет связи','No connection')+(dv.err?': '+dv.err:'')):(I&&I.eta!=null?`${tr('До конца заряда','Time to full')} ≈ ${fh(I.eta)} (${tr('к','by')} ${new Date(Date.now()+I.eta*60000).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}) · ${I.phase}`:(I?I.phase:''));
  q('.kp').innerHTML=d?`<div><b>${d.V.toFixed(1)} ${uV}</b>${tr('сборка','pack')}</div><div><b>${d.I.toFixed(1)} ${uA}</b>${tr('ток','current')}</div><div><b>${d.tmax??'—'} °C</b>${tr('температура','temperature')}</div>`:'';
  q('.cloud').textContent=cloudLine(dv);
+ q('.bchg').textContent=tr('Ключ заряда','Charge switch')+(d&&d.chg!=null?': '+(d.chg?tr('ВКЛ','ON'):tr('ВЫКЛ','OFF')):'');
+ q('.bdisw').textContent=tr('Ключ разряда','Discharge switch')+(d&&d.dis!=null?': '+(d.dis?tr('ВКЛ','ON'):tr('ВЫКЛ','OFF')):'');
  q('.chips').innerHTML=dv.checks.map(c=>`<span class="chip c${c.level}"><i></i>${esc(c.name)}</span>`).join('');
  q('.issues').innerHTML=dv.checks.filter(c=>c.level>0).map(c=>`<div class="i${c.level}">${esc(c.name)}: ${esc(c.text)}</div>`).join('');
  if(d&&d.cells.length){const C=dv.C,cs=d.cells,mx=Math.max(...cs),mn=Math.min(...cs),m=cs.reduce((a,v)=>a+v,0)/cs.length,lo=C.loBad+200,hi=C.vmax+50,pos=v=>Math.max(0,Math.min(100,(v-lo)/(hi-lo)*100));
@@ -234,7 +245,7 @@ async function addDevice(all){audio();try{Notification.requestPermission&&Notifi
 $('add').onclick=()=>addDevice(false);$('addall').onclick=()=>addDevice(true);
 const ua=navigator.userAgent,isIOS=/iPhone|iPad|iPod/i.test(ua)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
 const badBrowser=isIOS||!navigator.bluetooth||!/Chrome\/|Edg\//i.test(ua)||/SamsungBrowser|YaBrowser|OPR\/|UCBrowser|MiuiBrowser|VivoBrowser|; wv\)|Telegram|FB_IAB|FBAN/i.test(ua);
-const DICT={'Daly BMS монитор':'Daly BMS Monitor','Подключите Daly BMS':'Connect your Daly BMS','Включите BMS и закройте приложение Smart BMS.':'Turn the BMS on and close the Smart BMS app.','⚡ Ячейки и перекос':'⚡ Cells & spread','⏱ Прогноз CC/CV':'⏱ CC/CV forecast','🛡 Защиты и журнал':'🛡 Protections & log','Подключить BMS':'Connect BMS','Демо без BMS':'Demo without a BMS','Все Bluetooth-устройства':'All Bluetooth devices','Журнал':'Log','заряд, ≈%':'charge, ≈%','Заряд: идеал и сейчас':'Charge: ideal vs now','сейчас':'now','идеал':'ideal','предел ячейки':'cell limit','Ячейки и балансировка':'Cells and balancing','■ выше среднего':'■ above average','■ ниже среднего':'■ below average','⚖ балансир работает':'⚖ balancing active','Перекос ячеек':'Cell spread','■ цель ≤30 мВ':'■ target ≤30 mV','■ допуск ≤150':'■ limit ≤150','Ресурс':'Lifetime','Настройки и данные':'Settings and data','Химия':'Chemistry','Ёмкость, А·ч':'Capacity, Ah','Скачать CSV':'Download CSV','Поделиться':'Share','Отправить сейчас':'Upload now','Очистить историю':'Clear history','Отключить':'Disconnect','Ёмкость нужна для оценки времени до конца заряда и «идеальной» кривой. Химия задаёт предел ячейки (3,65 В для LiFePO4, 4,2 В для NMC).':'Capacity is used for the time-to-full estimate and the "ideal" curve. Chemistry sets the cell limit (3.65 V for LiFePO4, 4.2 V for NMC).','События':'Events'};
+const DICT={'Daly BMS монитор':'Daly BMS Monitor','Подключите Daly BMS':'Connect your Daly BMS','Включите BMS и закройте приложение Smart BMS.':'Turn the BMS on and close the Smart BMS app.','⚡ Ячейки и перекос':'⚡ Cells & spread','⏱ Прогноз CC/CV':'⏱ CC/CV forecast','🛡 Защиты и журнал':'🛡 Protections & log','Подключить BMS':'Connect BMS','Демо без BMS':'Demo without a BMS','Все Bluetooth-устройства':'All Bluetooth devices','Журнал':'Log','заряд, ≈%':'charge, ≈%','Заряд: идеал и сейчас':'Charge: ideal vs now','сейчас':'now','идеал':'ideal','предел ячейки':'cell limit','Ячейки и балансировка':'Cells and balancing','■ выше среднего':'■ above average','■ ниже среднего':'■ below average','⚖ балансир работает':'⚖ balancing active','Перекос ячеек':'Cell spread','■ цель ≤30 мВ':'■ target ≤30 mV','■ допуск ≤150':'■ limit ≤150','Ресурс':'Lifetime','Настройки и данные':'Settings and data','Химия':'Chemistry','Ёмкость, А·ч':'Capacity, Ah','Скачать CSV':'Download CSV','Поделиться':'Share','Отправить сейчас':'Upload now','Очистить историю':'Clear history','Отключить':'Disconnect','Управление BMS:':'BMS control:','Ключ заряда':'Charge switch','Ключ разряда':'Discharge switch','Сброс BMS':'Reset BMS','Ёмкость нужна для оценки времени до конца заряда и «идеальной» кривой. Химия задаёт предел ячейки (3,65 В для LiFePO4, 4,2 В для NMC).':'Capacity is used for the time-to-full estimate and the "ideal" curve. Chemistry sets the cell limit (3.65 V for LiFePO4, 4.2 V for NMC).','События':'Events'};
 function trDom(root){if(LANG==='ru')return;const w=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);let n;while(n=w.nextNode()){const s=n.nodeValue.trim();if(DICT[s])n.nodeValue=n.nodeValue.replace(s,DICT[s])}}
 document.documentElement.lang=LANG;trDom(document.body);
 if(LANG==='en'){document.title='Daly BMS Monitor';const m=document.querySelector('meta[name=description]');if(m)m.content='Daly Smart BMS monitor over Bluetooth: charge charts, cells, balancing, checks.'}
