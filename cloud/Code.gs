@@ -38,6 +38,7 @@ function verdict_(s) {
   if (s.minCell <= lo) out.push('глубокий разряд ячейки');
   if (s.spread >= 300) out.push('сильный перекос'); else if (s.spread >= 150) out.push('перекос');
   if (s.topImbal > 60 && s.spread < 150) out.push('разбаланс у верха в покое: ' + s.topImbal + ' мВ');
+  if (s.irBad) out.push('повыш. R_вн: ' + s.irBad);
   if (s.flt) out.push('ошибка BMS (0x' + s.flt + ')');
   if (s.alarms > 0) out.push('были тревоги: ' + s.alarms);
   return out.length ? out.join('; ') : 'норма';
@@ -66,9 +67,10 @@ function doPost(e) {
     var cap = num_(b.cap, 1, 2000), cycles = num_(b.cycles, 0, 100000);
 
     var ss = sheet_('sessions', ['session', 'first_seen', 'updated', 'rows', 'chem', 'cap_Ah', 'cycles', 'cells', 'I_mean_A',
-      'I_max_A', 'max_cell_mV', 'min_cell_mV', 'spread_last_mV', 'last_data', 'alarms', 'verdict']);
+      'I_max_A', 'max_cell_mV', 'min_cell_mV', 'spread_last_mV', 'last_data', 'alarms', 'verdict', 'lim_mV', 'ir_mOhm']);
+    if (ss.getLastColumn() < 18) ss.getRange(1, 17, 1, 2).setValues([['lim_mV', 'ir_mOhm']]);
     var ids = ss.getLastRow() > 1 ? ss.getRange(2, 1, ss.getLastRow() - 1, 1).getValues().map(function (r) { return r[0]; }) : [];
-    var idx = ids.indexOf(b.sid), row = idx >= 0 ? ss.getRange(idx + 2, 1, 1, 16).getValues()[0] : null;
+    var idx = ids.indexOf(b.sid), row = idx >= 0 ? ss.getRange(idx + 2, 1, 1, 18).getValues()[0] : null;
     var water = row && row[13] instanceof Date ? row[13].getTime() / 1000 : 0;
 
     var good = [], seen = {}, i, xArr = Array.isArray(b.x) ? b.x : [];
@@ -138,10 +140,21 @@ function doPost(e) {
     if (n) { s.maxCell = Math.max(s.maxCell, maxCell); s.minCell = Math.min(s.minCell, minCell); }
     s.spread = last ? Math.max.apply(null, last.cells) - Math.min.apply(null, last.cells) : (row ? Number(row[12]) || 0 : 0);
     s.topImbal = topImbal; s.flt = fltHex;
+    var limStr = (b.lim && num_(b.lim.uv2, 1500, 3500) && num_(b.lim.ov2, 3000, 4500)) ? (Math.round(b.lim.uv2) + '-' + Math.round(b.lim.ov2)) : (row ? row[16] : '');
+    var irArr = Array.isArray(b.ir) ? b.ir.slice(0, 32).map(function (v) { var z = num_(v, 0.05, 50); return z === null ? null : Math.round(z * 100) / 100; }) : null;
+    var irStr = irArr ? irArr.map(function (v) { return v === null ? '-' : v; }).join(' / ') : (row ? row[17] : '');
+    if (irArr) {
+      var validIr = irArr.filter(function (v) { return v !== null; }).sort(function (a, b) { return a - b; });
+      if (validIr.length) {
+        var medIr = validIr[validIr.length >> 1], badIr = [];
+        irArr.forEach(function (v, idx2) { if (v !== null && v > 1.5 && v > medIr * 2) badIr.push('яч.' + (idx2 + 1) + ' ' + v + ' мОм'); });
+        if (badIr.length) s.irBad = badIr.join(', ');
+      }
+    }
     var rec = [b.sid, s.first, now, s.rows, chem, cap === null ? '' : cap, cycles === null ? (row ? row[6] : '') : cycles,
       last ? last.cells.length : (row ? row[7] : ''), s.rows ? Math.round(s.sumI / s.rows * 10) / 10 : 0, s.maxI === -999 ? '' : s.maxI,
-      s.maxCell, s.minCell === 99999 ? '' : s.minCell, s.spread, last ? new Date(last.t * 1000) : (row ? row[13] : ''), s.alarms, verdict_(s)];
-    if (idx >= 0) ss.getRange(idx + 2, 1, 1, 16).setValues([rec]); else ss.appendRow(rec);
+      s.maxCell, s.minCell === 99999 ? '' : s.minCell, s.spread, last ? new Date(last.t * 1000) : (row ? row[13] : ''), s.alarms, verdict_(s), safe_(limStr, 32), safe_(irStr, 120)];
+    if (idx >= 0) ss.getRange(idx + 2, 1, 1, 18).setValues([rec]); else ss.appendRow(rec);
     return out_('ok');
   } catch (err) {
     return out_('bad');

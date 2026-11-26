@@ -8,9 +8,11 @@ const esc=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const u16=(f,i)=>(f[i]<<8)|f[i+1];
 const frame=(cmd,b0=0,fill=0)=>{const f=[0xA5,0x40,cmd,8,b0,fill,fill,fill,fill,fill,fill,fill];f.push(f.reduce((a,b)=>a+b)&255);return new Uint8Array(f)};
+const crc16=(b,n=b.length)=>{let c=0xFFFF;for(let i=0;i<n;i++){c^=b[i];for(let j=0;j<8;j++)c=(c&1)?(c>>>1)^0xA001:c>>>1}return c};
+const mbFrame=(a,fn,reg,val)=>{const b=[a,fn,reg>>8,reg&255,val>>8,val&255],c=crc16(b);b.push(c&255,c>>8);return new Uint8Array(b)};
 const fh=m=>m==null?'—':(m>=60?Math.floor(m/60)+tr(' ч ',' h ')+String(m%60).padStart(2,'0')+tr(' мин',' min'):m+tr(' мин',' min'));
 const stamp=()=>{const d=new Date(),p=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`};
-const SVC=0xfff0,PERIOD=2000,LONG_STEP=30,MAXLONG=5760;
+const SVC=0xfff0,SVC2=0xff00,PERIOD=2000,LONG_STEP=30,MAXLONG=5760;
 const L=[tr('РАБОТАЕТ ПРАВИЛЬНО','WORKING CORRECTLY'),tr('ВНИМАНИЕ','ATTENTION'),tr('НЕИСПРАВНОСТЬ / НЕТ СВЯЗИ','FAULT / NO CONNECTION')];
 
 const CHEM={
@@ -65,7 +67,7 @@ async function upload(dv,manual){
  if(wait>0){if(manual)toast(tr(`Слишком часто: подождите ${Math.ceil(wait/1000)} с`,`Too often: wait ${Math.ceil(wait/1000)} s`),'bad');return}
  const p=pending(dv);if(!p.rows&&!p.evs){if(manual)toast(tr('Всё уже отправлено, новых данных нет','Everything is already uploaded'),'ok');return}
  const rows=dv.long.filter(x=>x[0]>dv.upT).slice(0,500),evs=dv.events.filter(e=>e.t>dv.upE).reverse().slice(0,100);
- const body=JSON.stringify({v:1,sid:anon+'-'+hash6(dv.id),chem:dv.chem,cap:dv.cap,cycles:dv.last&&dv.last.cycles,rows:rows.map(x=>[x[0],x[1],...x[2]]),x:rows.map(x=>{const m=x[4]||{},b=(x[3]||[]).map((v,i)=>v?i+1:0).filter(Boolean).join(',');return{V:m.V,soc:m.soc,tmin:m.tmin,tmax:m.tmax,st:m.st,chg:m.chg,dis:m.dis,chgr:m.chgr,load:m.load,cap:m.cap,bal:b,flt:m.flt||''}}),events:evs.map(e=>[e.t,e.level,e.text])});
+ const body=JSON.stringify({v:1,sid:anon+'-'+hash6(dv.id),chem:dv.chem,cap:dv.cap,cycles:dv.last&&dv.last.cycles,lim:dv.lim,ir:dv.ir,rows:rows.map(x=>[x[0],x[1],...x[2]]),x:rows.map(x=>{const m=x[4]||{},b=(x[3]||[]).map((v,i)=>v?i+1:0).filter(Boolean).join(',');return{V:m.V,soc:m.soc,tmin:m.tmin,tmax:m.tmax,st:m.st,chg:m.chg,dis:m.dis,chgr:m.chgr,load:m.load,cap:m.cap,bal:b,flt:m.flt||''}}),events:evs.map(e=>[e.t,e.level,e.text])});
  dv.sending=true;dv.lastTry=Date.now();let confirmed=false;
  try{try{const r=await fetch(cloudUrl(),{method:'POST',headers:{'Content-Type':'text/plain'},body,referrerPolicy:'no-referrer',credentials:'omit'}),t=(await r.text()).trim();
     if(t!=='ok')throw new Error(t.slice(0,80)||tr('пустой ответ','empty response'));confirmed=true}
@@ -81,7 +83,7 @@ class Dev{
  constructor(device){this.dev=device;this.id=device.id;this.name=device.name||device.id;this.key='daly2:'+device.id;
   this.buf=[];this.frames=[];this.waiter=null;this.rx=null;this._onData=e=>this.onData(e);this.q=Promise.resolve();this.hist=[];this.long=[];this.events=[];this.chem='lfp';this.cap=105;
   this.last=null;this.prev=null;this.online=false;this.err=tr('подключение…','connecting…');this.want=true;this.running=false;this.badUntil=0;
-  this.ahIn=0;this.ahOut=0;this.t0=Date.now();this.longT=0;this.checks=[];this.level=3;this.lim=null;this.ir=null;this.limDone=false;
+  this.ahIn=0;this.ahOut=0;this.t0=Date.now();this.longT=0;this.checks=[];this.level=3;this.lim=null;this.ir=null;this.limDone=false;this.proto=null;
   this.upT=0;this.upE='';this.sent=0;this.sentAt=0;this.sentOk=null;this.lastTry=0;this.sending=false;
   try{const s=JSON.parse(localStorage.getItem(this.key)||'{}');if(CHEM[s.chem])this.chem=s.chem;if(Number.isFinite(s.cap))this.cap=Math.min(2000,Math.max(1,s.cap));
    const num=x=>typeof x==='number'&&Number.isFinite(x);
@@ -97,34 +99,78 @@ class Dev{
  async reconnect(){for(let i=0;this.want&&!this.running;i++){await sleep(Math.min(3000+i*1000,10000));if(!this.want||this.running)return;
    try{await this.connect()}catch(e){this.err=tr('переподключаюсь… (','reconnecting… (')+(i+1)+')'}}}
  async connect(){
-  const srv=await this.dev.gatt.connect();const s=await srv.getPrimaryService(SVC);
+  const srv=await this.dev.gatt.connect(),s=await srv.getPrimaryService(SVC).catch(()=>srv.getPrimaryService(SVC2));
   let cs=[];for(let i=0;i<4&&!cs.length;i++){try{cs=await s.getCharacteristics()}catch(e){await sleep(1000)}}
-  const rx=cs.find(c=>c.uuid.startsWith('0000fff1'))||cs.find(c=>c.properties.notify);
-  this.tx=cs.find(c=>c.uuid.startsWith('0000fff2'))||cs.find(c=>c.properties.writeWithoutResponse||c.properties.write);
+  const rx=cs.find(c=>c.uuid.startsWith('0000fff1')||c.uuid.startsWith('0000ff01'))||cs.find(c=>c.properties.notify);
+  this.tx=cs.find(c=>c.uuid.startsWith('0000fff2')||c.uuid.startsWith('0000ff02'))||cs.find(c=>c.properties.writeWithoutResponse||c.properties.write);
   if(!rx||!this.tx)throw new Error(tr('нет нужных характеристик (удалите устройство в настройках Bluetooth телефона и добавьте заново)','required characteristics not found (remove the device in your phone\'s Bluetooth settings and add it again)'));
   if(this.rx&&this.rx!==rx)this.rx.removeEventListener('characteristicvaluechanged',this._onData);
   rx.removeEventListener('characteristicvaluechanged',this._onData);rx.addEventListener('characteristicvaluechanged',this._onData);this.rx=rx;
   await rx.startNotifications();await sleep(200);
-  this.buf=[];this.frames=[];this.running=true;this.setOnline(true);lock();this.loop()}
+  this.buf=[];this.frames=[];this.running=true;this.setOnline(true);lock();if(!this.proto)await this.detectProto();this.loop()}
  onData(ev){const dv=ev.target.value,v=new Uint8Array(dv.buffer,dv.byteOffset,dv.byteLength);this.buf.push(...v);
+  if(this.proto==='d2'||this.proto==='81'){
+   const okA=a=>this.proto==='d2'?a===0xD2:(a===0x51||a===0x81);
+   while(this.buf.length>=3){if(!okA(this.buf[0])){this.buf.shift();continue}
+    const fn=this.buf[1],len=fn===0x03?this.buf[2]+5:fn===0x06?8:(fn&0x80)?5:0;
+    if(!len||len>260){this.buf.shift();continue}if(this.buf.length<len)return;
+    if(crc16(this.buf,len-2)!==(this.buf[len-2]|(this.buf[len-1]<<8))){this.buf.shift();continue}
+    this.frames.push(this.buf.splice(0,len));if(this.waiter)this.waiter()}
+   return}
   while(this.buf.length>=13){const i=this.buf.indexOf(0xA5);if(i<0){this.buf=[];return}if(i>0)this.buf.splice(0,i);if(this.buf.length<13)return;
    let sum=0;for(let k=0;k<12;k++)sum+=this.buf[k];if((sum&255)!==this.buf[12]){this.buf.splice(0,1);continue}
    this.frames.push(this.buf.splice(0,13));if(this.waiter)this.waiter()}}
  enqueue(fn){const p=this.q.then(fn,fn);this.q=p.catch(()=>{});return p}
- async _ask(cmd,n=1,b0=0,fill=0,to=1500){if(!this.running||!this.tx)return[];this.frames=[];const pkt=frame(cmd,b0,fill);
+ async _write(pkt){
   if(this.tx.properties.writeWithoutResponse&&this.tx.writeValueWithoutResponse){
    try{await this.tx.writeValueWithoutResponse(pkt)}catch(e){if(this.tx.properties.write&&this.tx.writeValueWithResponse)await this.tx.writeValueWithResponse(pkt);else throw e}
-  }else await this.tx.writeValueWithResponse(pkt);
+  }else await this.tx.writeValueWithResponse(pkt)}
+ async _wait(pred,to){const end=Date.now()+to;
+  for(;;){const got=this.frames.filter(pred);if(got.length||Date.now()>=end||!this.running)return got;
+   await new Promise(r=>{const done=()=>{clearTimeout(t);this.waiter=null;r()};const t=setTimeout(done,Math.max(50,end-Date.now()));this.waiter=done})}}
+ async _ask(cmd,n=1,b0=0,fill=0,to=1500){if(!this.running||!this.tx)return[];this.frames=[];await this._write(frame(cmd,b0,fill));
   const end=Date.now()+to;
   for(;;){const got=this.frames.filter(f=>f[2]===cmd);if(got.length>=n||Date.now()>=end||!this.running)return got;
    await new Promise(r=>{const done=()=>{clearTimeout(t);this.waiter=null;r()};const t=setTimeout(done,Math.max(50,end-Date.now()));this.waiter=done})}}
+ async _mb(addr,fn,reg,val,to=1500){if(!this.running||!this.tx)return null;this.frames=[];await this._write(mbFrame(addr,fn,reg,val));
+  const got=await this._wait(f=>f[1]===fn,to);return got.length?got[0]:null}
+ async detectProto(){return this.enqueue(async()=>{
+  this.proto='a5';this.buf=[];if((await this._ask(0x90,1,0,0,600)).length)return;
+  this.proto='d2';this.buf=[];if(await this._mb(0xD2,3,0x0000,0x003E,600))return;
+  this.proto='81';this.buf=[];if(await this._mb(0x81,3,0x0000,0x0040,600))return;
+  this.proto='a5';this.buf=[]})}
  ask(cmd,n=1,b0=0){return this.enqueue(()=>this._ask(cmd,n,b0))}
  async cmd(c,b0,label){if(this.demo){toast(tr('В демо управление BMS недоступно','BMS control is unavailable in demo'));return}
   if(!this.running||!this.tx){toast(tr('Сначала подключитесь к BMS','Connect to BMS first'),'bad');return}
-  return this.enqueue(async()=>{try{const f=await this._ask(c,1,b0);if(!f.length)throw new Error(tr('нет ответа','no response'));
+  if(this.proto!=='a5'&&c===0x00){toast(tr('Сброс недоступен для Modbus BMS','Reset is unavailable on Modbus BMS'),'bad');return}
+  return this.enqueue(async()=>{try{
+    let ok=false;
+    if(this.proto==='d2'){const reg=c===0xDA?0x00A5:0x00A6;ok=!!(await this._mb(0xD2,6,reg,b0))}
+    else if(this.proto==='81'){const reg=c===0xDA?0x0121:0x0122;ok=!!(await this._mb(0x81,6,reg,b0))}
+    else{ok=!!(await this._ask(c,1,b0)).length}
+    if(!ok)throw new Error(tr('нет ответа','no response'));
     this.event(1,label);glog(label);toast(label,'ok');if(c!==0x00)this.update(await this._poll())}
    catch(e){toast(tr('Команда не выполнена: ','Command failed: ')+(e.message||e),'bad');glog(label+': '+(e.message||e))}})}
- async _poll(){const d={t:Date.now()/1000};let f=await this._ask(0x90);if(!f.length)throw new Error(tr('нет ответа','no response'));f=f[0];
+ async _poll(){const d={t:Date.now()/1000};
+  if(this.proto==='d2'){const f=await this._mb(0xD2,3,0x0000,0x003E);if(!f)throw new Error(tr('нет ответа','no response'));
+   const p=f.slice(3,-2),n=Math.min(u16(p,98)||8,32),nt=Math.min(u16(p,100)||0,8);d.n=n;
+   d.cells=[];for(let i=0;i<n;i++)d.cells.push(u16(p,i*2));
+   const ts=[];for(let i=0;i<nt;i++){const t=u16(p,64+i*2);if(t>0&&t<255)ts.push(t-40)}
+   if(ts.length){d.tmax=Math.max(...ts);d.tmin=Math.min(...ts)}
+   d.V=u16(p,80)/10;d.I=(u16(p,82)-30000)/10;d.soc=u16(p,84)/10;d.state=u16(p,94);d.cap=u16(p,96)/10;
+   d.cycles=u16(p,102);d.chg=u16(p,106)?1:0;d.dis=u16(p,108)?1:0;d.charger=null;d.load=null;d.bal=[];d.fault=[];
+   d.asleep=d.V===0&&(!d.cells.length||!d.cells.some(x=>x));return d}
+  if(this.proto==='81'){const f1=await this._mb(0x81,3,0x0000,0x0040),f2=await this._mb(0x81,3,0x0041,0x003E);
+   if(!f1||!f2)throw new Error(tr('нет ответа','no response'));
+   const p1=f1.slice(3,-2),p2=f2.slice(3,-2),n=Math.min(u16(p1,120)||8,48),nt=Math.min(u16(p1,122)||0,8);d.n=n;
+   d.cells=[];for(let i=0;i<n;i++)d.cells.push(u16(p1,i*2));
+   const ts=[];for(let i=0;i<nt;i++){const t=u16(p1,96+i*2);if(t>0&&t<255)ts.push(t-40)}
+   if(ts.length){d.tmax=Math.max(...ts);d.tmin=Math.min(...ts)}
+   d.V=u16(p1,112)/10;d.I=(u16(p1,114)-30000)/10;d.soc=u16(p1,116)/10;
+   d.cap=u16(p2,20)/10;d.cycles=u16(p2,22);d.chg=u16(p2,34)?1:0;d.dis=u16(p2,36)?1:0;
+   d.state=d.I>.3?1:(d.I<-.3?2:0);d.charger=null;d.load=null;d.bal=[];d.fault=[];
+   d.asleep=d.V===0&&(!d.cells.length||!d.cells.some(x=>x));return d}
+  let f=await this._ask(0x90);if(!f.length)throw new Error(tr('нет ответа','no response'));f=f[0];
   d.V=u16(f,4)/10;d.I=(u16(f,8)-30000)/10;d.soc=u16(f,10)/10;
   f=await this._ask(0x92);if(f.length){d.tmax=f[0][4]-40;d.tmin=f[0][6]-40}
   f=await this._ask(0x93);if(f.length){f=f[0];d.state=f[4];d.chg=f[5];d.dis=f[6];d.cap=(((f[8]<<24)|(f[9]<<16)|(f[10]<<8)|f[11])>>>0)/1000}
@@ -278,7 +324,7 @@ function charts(dv,I,P){const q=P.q,lg=dv.long;if(!I||lg.length<2)return;const C
   lines:[{pts:[[0,100],[id.tEnd*.7,100],[id.tEnd,30]],c:'--acc2',d:[7,5],w:2},{pts:spr,c:'--acc',w:2.5}]})}
 
 async function addDevice(all){audio();try{Notification.requestPermission&&Notification.requestPermission()}catch(e){}
- try{const opt=all?{acceptAllDevices:true,optionalServices:[SVC]}:{filters:[{namePrefix:'DL-'},{services:[SVC]}],optionalServices:[SVC]};
+ try{const opt=all?{acceptAllDevices:true,optionalServices:[SVC,SVC2]}:{filters:[{namePrefix:'DL-'},{services:[SVC]},{services:[SVC2]}],optionalServices:[SVC,SVC2]};
   const device=await navigator.bluetooth.requestDevice(opt);
   if(devs.has(device.id)){const o=devs.get(device.id);if(!o.running){o.want=true;o.reconnect()}glog(tr('уже добавлена: ','already added: ')+o.name);return}
   const dv=new Dev(device);devs.set(device.id,dv);$('hero').style.display='none';upd(dv);glog(tr('подключаю ','connecting ')+dv.name+tr(', в истории ',', history: ')+dv.long.length+tr(' точек',' points'));
